@@ -39,14 +39,52 @@ public class ProfileController : ControllerBase
         try
         {
             // Update user by object ID
-            var requestBody = new User
+            var requestBody = new User();
+
+            // A variable to count the number of attributes that are set to be updated
+            int count = 0;
+
+            // Check the display name and set it to the request body
+            if (!string.IsNullOrEmpty(att.DisplayName))
             {
-                DisplayName = att.DisplayName,
-                GivenName = att.GivenName,
-                Surname = att.Surname,
-                Country = att.Country,
-                City = att.City
-            };
+                requestBody.DisplayName = att.DisplayName;
+                count++;
+            }
+
+            // Check the given name and set it to the request body
+            if (!string.IsNullOrEmpty(att.GivenName))
+            {
+                requestBody.GivenName = att.GivenName;
+                count++;
+            }
+
+            // Check the surname and set it to the request body
+            if (!string.IsNullOrEmpty(att.Surname))
+            {
+                requestBody.Surname = att.Surname;
+                count++;
+            }
+
+            // Check the country and set it to the request body
+            if (!string.IsNullOrEmpty(att.Country))
+            {
+                requestBody.Country = att.Country;
+                count++;
+            }
+
+            // Check the city and set it to the request body
+            if (!string.IsNullOrEmpty(att.City))
+            {
+                requestBody.City = att.City;
+                count++;
+            }
+
+            // Check if there are any attributes to be updated
+            if (count == 0)
+            {
+                att.ErrorMessage = "No attributes were provided to be updated.";
+                return Ok(att);
+            }
 
             var result = await _graphServiceClient.Me.PatchAsync(requestBody);
         }
