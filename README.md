@@ -8,8 +8,8 @@ The purpose of the middleware is to facilitate the process of editing user’s p
 
 - The middleware is responsible for acquiring an access token on behalf of the user (User.ReadWrite delegated permission). This token is then used to call the Microsoft Graph API's /me endpoint to edit the user's profile.
 
-  > [!IMPORTANT]
-  > There is currently a permission issue with using delegated permissions. Therefore, the app now uses **application permissions** instead.
+  > ℹ️ **Note:** This project requires Node.js 16 or above.
+ There is currently a permission issue with using delegated permissions. Therefore, the app now uses **application permissions** instead.
     
 - The middleware handles communication with Microsoft Graph API. It sends requests to update user profiles and processes the responses.
 
