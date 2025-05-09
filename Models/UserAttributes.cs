@@ -3,6 +3,7 @@ namespace woodgrovedemo.Models;
 public class UserAttributes
 {
     public string ErrorMessage { get; set; } = "";
+    public bool DontSkipEmptyString { get; set; } = true;
 
     /* User attributes*/
     public string DisplayName { get; set; } = "";

@@ -4,6 +4,7 @@ using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Graph.Models.ODataErrors;
 using Microsoft.Identity.Web;
+using woodgrovedemo.Helpers;
 using woodgrovedemo.Models;
 
 namespace woodgrove_groceries_graph_middleware.Controllers;
@@ -14,12 +15,15 @@ namespace woodgrove_groceries_graph_middleware.Controllers;
 public class ProfileController : ControllerBase
 {
 
+    // Dependency injection
+    private readonly IConfiguration _configuration;
     private readonly ILogger<ProfileController> _logger;
     private readonly GraphServiceClient _graphServiceClient;
 
-    public ProfileController(ILogger<ProfileController> logger, GraphServiceClient graphServiceClient)
+    public ProfileController(ILogger<ProfileController> logger, IConfiguration configuration, GraphServiceClient graphServiceClient)
     {
         _logger = logger;
+        _configuration = configuration;
         _graphServiceClient = graphServiceClient; ;
     }
 
@@ -45,35 +49,35 @@ public class ProfileController : ControllerBase
             int count = 0;
 
             // Check the display name and set it to the request body
-            if (!string.IsNullOrEmpty(att.DisplayName))
+            if (att.DontSkipEmptyString || string.IsNullOrEmpty(att.DisplayName) == false)
             {
                 requestBody.DisplayName = att.DisplayName;
                 count++;
             }
 
             // Check the given name and set it to the request body
-            if (!string.IsNullOrEmpty(att.GivenName))
+            if (att.DontSkipEmptyString || string.IsNullOrEmpty(att.GivenName) == false)
             {
                 requestBody.GivenName = att.GivenName;
                 count++;
             }
 
             // Check the surname and set it to the request body
-            if (!string.IsNullOrEmpty(att.Surname))
+            if (att.DontSkipEmptyString || string.IsNullOrEmpty(att.Surname) == false)
             {
                 requestBody.Surname = att.Surname;
                 count++;
             }
 
             // Check the country and set it to the request body
-            if (!string.IsNullOrEmpty(att.Country))
+            if (att.DontSkipEmptyString || string.IsNullOrEmpty(att.Country) == false)
             {
                 requestBody.Country = att.Country;
                 count++;
             }
 
             // Check the city and set it to the request body
-            if (!string.IsNullOrEmpty(att.City))
+            if (att.DontSkipEmptyString || string.IsNullOrEmpty(att.City) == false)
             {
                 requestBody.City = att.City;
                 count++;
@@ -86,7 +90,14 @@ public class ProfileController : ControllerBase
                 return Ok(att);
             }
 
-            var result = await _graphServiceClient.Me.PatchAsync(requestBody);
+            // There is an issue with the delegated permissions, thefore we comment the next line and use app permissions
+            //var result = await _graphServiceClient.Me.PatchAsync(requestBody);
+
+            // Aquire the access token to call the Graph API with app permissions
+            var graphClient = MsalAccessTokenHandler.GetGraphClient(_configuration);
+
+            // Call the Graph API to update the user profile using the user object ID
+            User? result = await graphClient.Users[userObjectId].PatchAsync(requestBody);
         }
         catch (ODataError odataError)
         {
