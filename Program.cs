@@ -39,28 +39,7 @@ builder.Services.AddMemoryCache();
 // Add API controllers
 builder.Services.AddControllers();
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Version = "v1",
-        Title = "Woodgrove Groceries web API",
-        Description = "This dotnet Web API entpoint demonstrate how to secure access to API using Microsoft Entra External ID. Checkout the [source code](https://github.com/microsoft/woodgrove-groceries-api) <br> <br> Assembly version " + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(),
-    });
-});
-builder.Services.AddSwaggerGen();
-
 var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-app.UseSwagger();
-app.UseSwaggerUI(options =>
-{
-    options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
-    options.RoutePrefix = string.Empty;
-});
 
 app.UseHttpsRedirection();
 
