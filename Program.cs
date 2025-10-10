@@ -79,31 +79,11 @@ builder.Services.AddControllers();
 // The following line enables Application Insights telemetry collection.
 builder.Services.AddApplicationInsightsTelemetry();
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Version = "v1",
-        Title = "Woodgrove custom authentication extension API",
-        Description = "This dotnet Web API endpoint demonstrate how to use Microsoft Entra External ID's custom authentication extension for various events. Checkout the [source code](https://github.com/microsoft/woodgrove-api) and [request samples](./help.html) <br> <br> Assembly version " + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version!.ToString(),
-    });
-});
-
-
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 //if (app.Environment.IsDevelopment())
 //{
-app.UseSwagger();
-app.UseSwaggerUI(options =>
-{
-    options.SwaggerEndpoint("/swagger/v1/swagger.json", "v1");
-    options.RoutePrefix = string.Empty;
-});
-//}
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
