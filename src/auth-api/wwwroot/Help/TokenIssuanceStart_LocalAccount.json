@@ -1,0 +1,37 @@
+{
+    "type": "microsoft.graph.authenticationEvent.tokenIssuanceStart",
+    "source": "/tenants/12345678-0000-0000-0000-000000000000/applications/44444444-0000-0000-0000-000000000000",
+    "data": {
+        "@odata.type": "microsoft.graph.onTokenIssuanceStartCalloutData",
+        "tenantId": "12345678-0000-0000-0000-000000000000",
+        "authenticationEventListenerId": "55555555-3333-0000-0000-000000000000",
+        "customAuthenticationExtensionId": "66666666-3333-0000-0000-000000000000",
+        "authenticationContext": {
+            "correlationId": "0c83d76c-b8da-45bb-ac7a-f9bb5e0db340",
+            "client": {
+                "ip": "2a0d:0000:0000:0000:0000:0000:e02d:78d3",
+                "locale": "en-us",
+                "market": "en-us"
+            },
+            "protocol": "OAUTH2.0",
+            "clientServicePrincipal": {
+                "id": "33333333-0000-0000-0000-000000000000",
+                "appId": "44444444-0000-0000-0000-000000000000",
+                "appDisplayName": "My Test application",
+                "displayName": "My Test application"
+            },
+            "resourceServicePrincipal": {
+                "id": "33333333-0000-0000-0000-000000000000",
+                "appId": "44444444-0000-0000-0000-000000000000",
+                "appDisplayName": "My Test application",
+                "displayName": "My Test application"
+            },
+            "user": {
+                "displayName": "Emily",
+                "id": "7f122226-0000-0000-0000-000000000000",
+                "userPrincipalName": "7f122226-0000-0000-0000-000000000000@woodgrovedemo.onmicrosoft.com",
+                "userType": "Member"
+            }
+        }
+    }
+}

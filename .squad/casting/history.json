@@ -1,0 +1,12 @@
+{
+  "universe_usage_history": [
+    { "universe": "The Matrix", "assignment_id": "woodgrove-2026-07-21", "used_at": "2026-07-21T07:45:38-07:00" }
+  ],
+  "assignment_cast_snapshots": {
+    "woodgrove-2026-07-21": {
+      "universe": "The Matrix",
+      "agents": { "lead-architect": "Morpheus", "identity-auth": "Trinity", "backend-api": "Tank", "cloud-devops": "Dozer", "frontend": "Switch" },
+      "created_at": "2026-07-21T07:45:38-07:00"
+    }
+  }
+}

@@ -9,10 +9,10 @@
 *.user
 *.userosscache
 *.sln.docstates
+appsettings.Development.json
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
-appsettings.Development.json
 
 # Mono auto generated files
 mono_crash.*
@@ -476,12 +476,3 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
-# Squad: ignore runtime state (logs, inbox, sessions)
-.squad/orchestration-log/
-.squad/log/
-.squad/decisions/inbox/
-.squad/sessions/
-.squad/.scratch/
-.squad/.cache/
-# Squad: SubSquad activation file (local to this machine)
-.squad-workstream

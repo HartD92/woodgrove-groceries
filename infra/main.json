@@ -1,0 +1,1747 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.45.15.27210",
+      "templateHash": "3238786922188504472"
+    }
+  },
+  "parameters": {
+    "environmentName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16,
+      "metadata": {
+        "description": "Short environment identifier used in all resource names (e.g. dev, staging, prod)"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "metadata": {
+        "description": "Azure region for all resources"
+      }
+    },
+    "appServicePlanSku": {
+      "type": "string",
+      "defaultValue": "P1v3",
+      "metadata": {
+        "description": "App Service Plan SKU name (default P1v3 = Premium v3 1 core)"
+      }
+    },
+    "tenantId": {
+      "type": "string",
+      "metadata": {
+        "description": "Entra External ID (CIAM) tenant ID"
+      }
+    },
+    "webClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "App registration client ID — woodgrove-groceries web app"
+      }
+    },
+    "apiClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "App registration client ID — woodgrove-groceries-api"
+      }
+    },
+    "graphClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "App registration client ID — graph-middleware"
+      }
+    },
+    "authClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "App registration client ID — auth-api (custom authentication extension)"
+      }
+    },
+    "webDomain": {
+      "type": "string",
+      "defaultValue": "woodgrovedemo.com",
+      "metadata": {
+        "description": "Primary public domain for the web app (e.g. woodgrovedemo.com)"
+      }
+    },
+    "entraAuthorityUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Entra authority URL — e.g. https://<tenant>.ciamlogin.com/<tenantId>/v2.0"
+      }
+    },
+    "cloudflareZoneId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Cloudflare Zone ID (non-secret; used for DNS automation app setting)"
+      }
+    },
+    "websiteLoadCertificates": {
+      "type": "string",
+      "defaultValue": "*",
+      "metadata": {
+        "description": "Certificate thumbprints to load into Windows cert store (* = all certs available to the app)"
+      }
+    },
+    "acsDataLocation": {
+      "type": "string",
+      "defaultValue": "United States",
+      "metadata": {
+        "description": "ACS data residency location"
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Additional tags applied to all resources"
+      }
+    },
+    "provisionEntraApps": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "When true (default), Bicep provisions the four Entra app registrations via the\nMicrosoft Graph extension and uses their output appIds for app settings.\n\nWhen false, the *ClientId params below are used directly — preserving backward\ncompatibility for environments where app registrations already exist and should\nnot be modified by this deployment.\n"
+      }
+    }
+  },
+  "variables": {
+    "uniqueSuffix": "[take(uniqueString(subscription().subscriptionId, parameters('environmentName')), 6)]",
+    "rgName": "[format('rg-woodgrove-{0}', parameters('environmentName'))]",
+    "planName": "[format('plan-woodgrove-main-{0}', parameters('environmentName'))]",
+    "webAppName": "[format('app-woodgrove-web-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
+    "apiAppName": "[format('app-woodgrove-api-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
+    "graphAppName": "[format('app-woodgrove-graph-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
+    "authAppName": "[format('app-woodgrove-auth-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
+    "kvName": "[format('kv-wg-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
+    "kvBaseUri": "[format('https://{0}{1}/', variables('kvName'), environment().suffixes.keyvaultDns)]",
+    "logWorkspaceName": "[format('log-woodgrove-{0}', parameters('environmentName'))]",
+    "appInsightsName": "[format('appi-woodgrove-{0}', parameters('environmentName'))]",
+    "acsName": "[format('acs-woodgrove-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
+    "emailSvcName": "[format('email-woodgrove-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
+    "allTags": "[union(parameters('tags'), createObject('environment', parameters('environmentName'), 'project', 'woodgrove-groceries', 'managedBy', 'bicep'))]",
+    "kvRefAppInsights": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/appinsights-connection-string/)', variables('kvBaseUri'))]",
+    "kvRefAcsConn": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/acs-connection-string/)', variables('kvBaseUri'))]",
+    "kvRefWebSecret": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/web-client-secret/)', variables('kvBaseUri'))]",
+    "kvRefCloudflare": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/cloudflare-api-secret/)', variables('kvBaseUri'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2021-04-01",
+      "name": "[variables('rgName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('allTags')]"
+    },
+    {
+      "condition": "[parameters('provisionEntraApps')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "entraApps",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "webDomain": {
+            "value": "[parameters('webDomain')]"
+          },
+          "webAppHostName": {
+            "value": "[format('{0}.azurewebsites.net', variables('webAppName'))]"
+          },
+          "authAppHostName": {
+            "value": "[format('{0}.azurewebsites.net', variables('authAppName'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "2485550660016196174"
+            }
+          },
+          "parameters": {
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Short environment identifier — drives uniqueName suffix so dev/staging/prod get separate registrations"
+              }
+            },
+            "webDomain": {
+              "type": "string",
+              "defaultValue": "woodgrovedemo.com",
+              "metadata": {
+                "description": "Primary public domain for the web app (e.g. woodgrovedemo.com)"
+              }
+            },
+            "webAppHostName": {
+              "type": "string",
+              "metadata": {
+                "description": "Default hostname of the web App Service (used for redirect URIs)"
+              }
+            },
+            "authAppHostName": {
+              "type": "string",
+              "metadata": {
+                "description": "Default hostname of the auth-api App Service (custom auth extension callback host)"
+              }
+            }
+          },
+          "variables": {
+            "apiAccessAsUserScopeId": "[guid(parameters('environmentName'), 'woodgrove-api', 'access_as_user')]",
+            "msGraphAppId": "00000003-0000-0000-c000-000000000000",
+            "graphUserReadWriteAllId": "741f803b-c850-494e-b5df-cde7c675a1ca",
+            "graphGroupReadWriteAllId": "62a82d76-70ea-41e2-9197-370581804d09",
+            "graphDirectoryReadWriteAllId": "19dbc75e-c2e2-444c-a770-ec69d8559fc7"
+          },
+          "imports": {
+            "microsoftGraphV1": {
+              "provider": "MicrosoftGraph",
+              "version": "1.0.0"
+            }
+          },
+          "resources": {
+            "apiApplication": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/applications@v1.0",
+              "properties": {
+                "uniqueName": "[format('woodgrove-groceries-api-{0}', parameters('environmentName'))]",
+                "displayName": "[format('woodgrove-groceries-api ({0})', parameters('environmentName'))]",
+                "api": {
+                  "requestedAccessTokenVersion": 2,
+                  "oauth2PermissionScopes": [
+                    {
+                      "id": "[variables('apiAccessAsUserScopeId')]",
+                      "adminConsentDisplayName": "Access woodgrove-groceries-api as the signed-in user",
+                      "adminConsentDescription": "Allows the app to access woodgrove-groceries-api on behalf of the signed-in user.",
+                      "userConsentDisplayName": "Access woodgrove-groceries-api",
+                      "userConsentDescription": "Allows this app to access woodgrove-groceries-api on your behalf.",
+                      "value": "access_as_user",
+                      "type": "User",
+                      "isEnabled": true
+                    }
+                  ]
+                },
+                "identifierUris": [
+                  "[format('api://woodgrove-groceries-api-{0}', parameters('environmentName'))]"
+                ],
+                "signInAudience": "AzureADMyOrg"
+              }
+            },
+            "apiServicePrincipal": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/servicePrincipals@v1.0",
+              "properties": {
+                "appId": "[reference('apiApplication').appId]",
+                "tags": [
+                  "woodgrove-groceries",
+                  "[parameters('environmentName')]"
+                ]
+              },
+              "dependsOn": [
+                "apiApplication"
+              ]
+            },
+            "webApplication": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/applications@v1.0",
+              "properties": {
+                "uniqueName": "[format('woodgrove-groceries-web-{0}', parameters('environmentName'))]",
+                "displayName": "[format('woodgrove-groceries ({0})', parameters('environmentName'))]",
+                "signInAudience": "AzureADMyOrg",
+                "web": {
+                  "redirectUris": [
+                    "[format('https://{0}/signin-oidc', parameters('webAppHostName'))]",
+                    "[format('https://{0}/signin-oidc', parameters('webDomain'))]"
+                  ],
+                  "logoutUrl": "[format('https://{0}/signout-oidc', parameters('webAppHostName'))]",
+                  "implicitGrantSettings": {
+                    "enableIdTokenIssuance": true,
+                    "enableAccessTokenIssuance": false
+                  }
+                },
+                "requiredResourceAccess": [
+                  {
+                    "resourceAppId": "[reference('apiApplication').appId]",
+                    "resourceAccess": [
+                      {
+                        "id": "[variables('apiAccessAsUserScopeId')]",
+                        "type": "Scope"
+                      }
+                    ]
+                  },
+                  {
+                    "resourceAppId": "[variables('msGraphAppId')]",
+                    "resourceAccess": [
+                      {
+                        "id": "37f7f235-527c-4136-accd-4a02d197296e",
+                        "type": "Scope"
+                      },
+                      {
+                        "id": "7427e0e9-2fba-42fe-b0c0-848c9e6a8182",
+                        "type": "Scope"
+                      },
+                      {
+                        "id": "14dad69e-099b-42c9-810b-d002981feec1",
+                        "type": "Scope"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "dependsOn": [
+                "apiApplication"
+              ]
+            },
+            "webServicePrincipal": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/servicePrincipals@v1.0",
+              "properties": {
+                "appId": "[reference('webApplication').appId]",
+                "tags": [
+                  "woodgrove-groceries",
+                  "[parameters('environmentName')]"
+                ]
+              },
+              "dependsOn": [
+                "webApplication"
+              ]
+            },
+            "graphApplication": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/applications@v1.0",
+              "properties": {
+                "uniqueName": "[format('woodgrove-graph-middleware-{0}', parameters('environmentName'))]",
+                "displayName": "[format('woodgrove-graph-middleware ({0})', parameters('environmentName'))]",
+                "signInAudience": "AzureADMyOrg",
+                "requiredResourceAccess": [
+                  {
+                    "resourceAppId": "[variables('msGraphAppId')]",
+                    "resourceAccess": [
+                      {
+                        "id": "[variables('graphUserReadWriteAllId')]",
+                        "type": "Role"
+                      },
+                      {
+                        "id": "[variables('graphGroupReadWriteAllId')]",
+                        "type": "Role"
+                      },
+                      {
+                        "id": "[variables('graphDirectoryReadWriteAllId')]",
+                        "type": "Role"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "graphServicePrincipal": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/servicePrincipals@v1.0",
+              "properties": {
+                "appId": "[reference('graphApplication').appId]",
+                "tags": [
+                  "woodgrove-groceries",
+                  "[parameters('environmentName')]"
+                ]
+              },
+              "dependsOn": [
+                "graphApplication"
+              ]
+            },
+            "authApplication": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/applications@v1.0",
+              "properties": {
+                "uniqueName": "[format('woodgrove-auth-api-{0}', parameters('environmentName'))]",
+                "displayName": "[format('woodgrove-auth-api ({0})', parameters('environmentName'))]",
+                "signInAudience": "AzureADMyOrg",
+                "appRoles": [
+                  {
+                    "id": "[guid(parameters('environmentName'), 'auth-api', 'CustomAuthenticationExtension.Receive.Payload')]",
+                    "displayName": "CustomAuthenticationExtension.Receive.Payload",
+                    "description": "Allows the custom authentication extension to receive payloads from Entra External ID",
+                    "value": "CustomAuthenticationExtension.Receive.Payload",
+                    "allowedMemberTypes": [
+                      "Application"
+                    ],
+                    "isEnabled": true
+                  }
+                ],
+                "web": {
+                  "redirectUris": [
+                    "[format('https://{0}/', parameters('authAppHostName'))]"
+                  ]
+                }
+              }
+            },
+            "authServicePrincipal": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/servicePrincipals@v1.0",
+              "properties": {
+                "appId": "[reference('authApplication').appId]",
+                "tags": [
+                  "woodgrove-groceries",
+                  "[parameters('environmentName')]"
+                ]
+              },
+              "dependsOn": [
+                "authApplication"
+              ]
+            }
+          },
+          "outputs": {
+            "webClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application (client) ID of the web / storefront app registration"
+              },
+              "value": "[reference('webApplication').appId]"
+            },
+            "apiClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application (client) ID of the API app registration"
+              },
+              "value": "[reference('apiApplication').appId]"
+            },
+            "graphClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application (client) ID of the graph-middleware app registration"
+              },
+              "value": "[reference('graphApplication').appId]"
+            },
+            "authClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application (client) ID of the auth-api app registration"
+              },
+              "value": "[reference('authApplication').appId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "monitoring",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "workspaceName": {
+            "value": "[variables('logWorkspaceName')]"
+          },
+          "appInsightsName": {
+            "value": "[variables('appInsightsName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('allTags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "16539765317479213374"
+            }
+          },
+          "parameters": {
+            "workspaceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics Workspace resource name"
+              }
+            },
+            "appInsightsName": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights resource name"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "retentionInDays": {
+              "type": "int",
+              "defaultValue": 30,
+              "metadata": {
+                "description": "Log retention in days (default 30)"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2023-09-01",
+              "name": "[parameters('workspaceName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": "[parameters('retentionInDays')]",
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[parameters('appInsightsName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "web",
+              "properties": {
+                "Application_Type": "web",
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
+                "IngestionMode": "LogAnalytics",
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "workspaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]"
+            },
+            "appInsightsId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/components', parameters('appInsightsName'))]"
+            },
+            "appInsightsName": {
+              "type": "string",
+              "value": "[parameters('appInsightsName')]"
+            },
+            "connectionString": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').ConnectionString]"
+            },
+            "instrumentationKey": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').InstrumentationKey]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "appServicePlan",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[variables('planName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "sku": {
+            "value": "[parameters('appServicePlanSku')]"
+          },
+          "tags": {
+            "value": "[variables('allTags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "2841159868597642229"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "App Service Plan resource name"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "sku": {
+              "type": "string",
+              "defaultValue": "P1v3",
+              "metadata": {
+                "description": "App Service Plan SKU name (e.g. P1v3, P2v3, S1)"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2023-12-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "[parameters('sku')]"
+              },
+              "kind": "windows",
+              "properties": {
+                "reserved": false
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/serverfarms', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "webApp",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[variables('webAppName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "appServicePlanId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan'), '2025-04-01').outputs.id.value]"
+          },
+          "netFrameworkVersion": {
+            "value": "v8.0"
+          },
+          "websiteLoadCertificates": {
+            "value": "[parameters('websiteLoadCertificates')]"
+          },
+          "tags": {
+            "value": "[variables('allTags')]"
+          },
+          "appSettings": {
+            "value": [
+              {
+                "name": "AzureAd__TenantId",
+                "value": "[parameters('tenantId')]"
+              },
+              {
+                "name": "AzureAd__ClientId",
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.webClientId.value, ''), parameters('webClientId'))]"
+              },
+              {
+                "name": "AzureAd__ClientSecret",
+                "value": "[variables('kvRefWebSecret')]"
+              },
+              {
+                "name": "AzureAd__Domain",
+                "value": "[parameters('webDomain')]"
+              },
+              {
+                "name": "AzureAd__Authority",
+                "value": "[parameters('entraAuthorityUrl')]"
+              },
+              {
+                "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                "value": "[variables('kvRefAppInsights')]"
+              },
+              {
+                "name": "Api__BaseUrl",
+                "value": "[format('https://{0}.azurewebsites.net', variables('apiAppName'))]"
+              },
+              {
+                "name": "GraphMiddleware__BaseUrl",
+                "value": "[format('https://{0}.azurewebsites.net', variables('graphAppName'))]"
+              },
+              {
+                "name": "AuthApi__BaseUrl",
+                "value": "[format('https://{0}.azurewebsites.net', variables('authAppName'))]"
+              },
+              {
+                "name": "AzureCommunicationServices__ConnectionString",
+                "value": "[variables('kvRefAcsConn')]"
+              },
+              {
+                "name": "Cloudflare__ZoneId",
+                "value": "[parameters('cloudflareZoneId')]"
+              },
+              {
+                "name": "Cloudflare__ApiSecret",
+                "value": "[variables('kvRefCloudflare')]"
+              }
+            ]
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "18283134702710421303"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Web app resource name — must be globally unique; becomes <name>.azurewebsites.net"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "appServicePlanId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the hosting App Service Plan"
+              }
+            },
+            "netFrameworkVersion": {
+              "type": "string",
+              "defaultValue": "v8.0",
+              "metadata": {
+                "description": ".NET Framework version loaded by the Windows host (e.g. v8.0, v6.0)"
+              }
+            },
+            "appSettings": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "App settings array: [ { name: string, value: string }, ... ]\nSecrets should use Key Vault references:\n  @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/<name>/)\n"
+              }
+            },
+            "websiteLoadCertificates": {
+              "type": "string",
+              "defaultValue": "*",
+              "metadata": {
+                "description": "Certificate thumbprints to load into the Windows cert store. Use * for all certs available to this app."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags"
+              }
+            }
+          },
+          "variables": {
+            "platformSettings": [
+              {
+                "name": "WEBSITE_LOAD_CERTIFICATES",
+                "value": "[parameters('websiteLoadCertificates')]"
+              },
+              {
+                "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
+                "value": "~3"
+              },
+              {
+                "name": "XDT_MicrosoftApplicationInsights_Mode",
+                "value": "Recommended"
+              }
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2023-12-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[parameters('appServicePlanId')]",
+                "httpsOnly": true,
+                "siteConfig": {
+                  "alwaysOn": true,
+                  "netFrameworkVersion": "[parameters('netFrameworkVersion')]",
+                  "use32BitWorkerProcess": false,
+                  "managedPipelineMode": "Integrated",
+                  "http20Enabled": true,
+                  "minTlsVersion": "1.2",
+                  "ftpsState": "Disabled",
+                  "appSettings": "[flatten(createArray(variables('platformSettings'), parameters('appSettings')))]"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01', 'full').identity.principalId]"
+            },
+            "defaultHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01').defaultHostName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apiApp",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[variables('apiAppName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "appServicePlanId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan'), '2025-04-01').outputs.id.value]"
+          },
+          "netFrameworkVersion": {
+            "value": "v8.0"
+          },
+          "websiteLoadCertificates": {
+            "value": "[parameters('websiteLoadCertificates')]"
+          },
+          "tags": {
+            "value": "[variables('allTags')]"
+          },
+          "appSettings": {
+            "value": [
+              {
+                "name": "AzureAd__TenantId",
+                "value": "[parameters('tenantId')]"
+              },
+              {
+                "name": "AzureAd__ClientId",
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.apiClientId.value, ''), parameters('apiClientId'))]"
+              },
+              {
+                "name": "AzureAd__Authority",
+                "value": "[parameters('entraAuthorityUrl')]"
+              },
+              {
+                "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                "value": "[variables('kvRefAppInsights')]"
+              },
+              {
+                "name": "AzureCommunicationServices__ConnectionString",
+                "value": "[variables('kvRefAcsConn')]"
+              }
+            ]
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "18283134702710421303"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Web app resource name — must be globally unique; becomes <name>.azurewebsites.net"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "appServicePlanId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the hosting App Service Plan"
+              }
+            },
+            "netFrameworkVersion": {
+              "type": "string",
+              "defaultValue": "v8.0",
+              "metadata": {
+                "description": ".NET Framework version loaded by the Windows host (e.g. v8.0, v6.0)"
+              }
+            },
+            "appSettings": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "App settings array: [ { name: string, value: string }, ... ]\nSecrets should use Key Vault references:\n  @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/<name>/)\n"
+              }
+            },
+            "websiteLoadCertificates": {
+              "type": "string",
+              "defaultValue": "*",
+              "metadata": {
+                "description": "Certificate thumbprints to load into the Windows cert store. Use * for all certs available to this app."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags"
+              }
+            }
+          },
+          "variables": {
+            "platformSettings": [
+              {
+                "name": "WEBSITE_LOAD_CERTIFICATES",
+                "value": "[parameters('websiteLoadCertificates')]"
+              },
+              {
+                "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
+                "value": "~3"
+              },
+              {
+                "name": "XDT_MicrosoftApplicationInsights_Mode",
+                "value": "Recommended"
+              }
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2023-12-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[parameters('appServicePlanId')]",
+                "httpsOnly": true,
+                "siteConfig": {
+                  "alwaysOn": true,
+                  "netFrameworkVersion": "[parameters('netFrameworkVersion')]",
+                  "use32BitWorkerProcess": false,
+                  "managedPipelineMode": "Integrated",
+                  "http20Enabled": true,
+                  "minTlsVersion": "1.2",
+                  "ftpsState": "Disabled",
+                  "appSettings": "[flatten(createArray(variables('platformSettings'), parameters('appSettings')))]"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01', 'full').identity.principalId]"
+            },
+            "defaultHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01').defaultHostName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "graphApp",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[variables('graphAppName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "appServicePlanId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan'), '2025-04-01').outputs.id.value]"
+          },
+          "netFrameworkVersion": {
+            "value": "v8.0"
+          },
+          "websiteLoadCertificates": {
+            "value": "[parameters('websiteLoadCertificates')]"
+          },
+          "tags": {
+            "value": "[variables('allTags')]"
+          },
+          "appSettings": {
+            "value": [
+              {
+                "name": "AzureAd__TenantId",
+                "value": "[parameters('tenantId')]"
+              },
+              {
+                "name": "AzureAd__ClientId",
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
+              },
+              {
+                "name": "AzureAd__Authority",
+                "value": "[parameters('entraAuthorityUrl')]"
+              },
+              {
+                "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                "value": "[variables('kvRefAppInsights')]"
+              }
+            ]
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "18283134702710421303"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Web app resource name — must be globally unique; becomes <name>.azurewebsites.net"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "appServicePlanId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the hosting App Service Plan"
+              }
+            },
+            "netFrameworkVersion": {
+              "type": "string",
+              "defaultValue": "v8.0",
+              "metadata": {
+                "description": ".NET Framework version loaded by the Windows host (e.g. v8.0, v6.0)"
+              }
+            },
+            "appSettings": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "App settings array: [ { name: string, value: string }, ... ]\nSecrets should use Key Vault references:\n  @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/<name>/)\n"
+              }
+            },
+            "websiteLoadCertificates": {
+              "type": "string",
+              "defaultValue": "*",
+              "metadata": {
+                "description": "Certificate thumbprints to load into the Windows cert store. Use * for all certs available to this app."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags"
+              }
+            }
+          },
+          "variables": {
+            "platformSettings": [
+              {
+                "name": "WEBSITE_LOAD_CERTIFICATES",
+                "value": "[parameters('websiteLoadCertificates')]"
+              },
+              {
+                "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
+                "value": "~3"
+              },
+              {
+                "name": "XDT_MicrosoftApplicationInsights_Mode",
+                "value": "Recommended"
+              }
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2023-12-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[parameters('appServicePlanId')]",
+                "httpsOnly": true,
+                "siteConfig": {
+                  "alwaysOn": true,
+                  "netFrameworkVersion": "[parameters('netFrameworkVersion')]",
+                  "use32BitWorkerProcess": false,
+                  "managedPipelineMode": "Integrated",
+                  "http20Enabled": true,
+                  "minTlsVersion": "1.2",
+                  "ftpsState": "Disabled",
+                  "appSettings": "[flatten(createArray(variables('platformSettings'), parameters('appSettings')))]"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01', 'full').identity.principalId]"
+            },
+            "defaultHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01').defaultHostName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "authApp",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[variables('authAppName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "appServicePlanId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan'), '2025-04-01').outputs.id.value]"
+          },
+          "netFrameworkVersion": {
+            "value": "v8.0"
+          },
+          "websiteLoadCertificates": {
+            "value": "[parameters('websiteLoadCertificates')]"
+          },
+          "tags": {
+            "value": "[variables('allTags')]"
+          },
+          "appSettings": {
+            "value": [
+              {
+                "name": "AzureAd__TenantId",
+                "value": "[parameters('tenantId')]"
+              },
+              {
+                "name": "AzureAd__ClientId",
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.authClientId.value, ''), parameters('authClientId'))]"
+              },
+              {
+                "name": "AzureAd__Authority",
+                "value": "[parameters('entraAuthorityUrl')]"
+              },
+              {
+                "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                "value": "[variables('kvRefAppInsights')]"
+              }
+            ]
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "18283134702710421303"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Web app resource name — must be globally unique; becomes <name>.azurewebsites.net"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "appServicePlanId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the hosting App Service Plan"
+              }
+            },
+            "netFrameworkVersion": {
+              "type": "string",
+              "defaultValue": "v8.0",
+              "metadata": {
+                "description": ".NET Framework version loaded by the Windows host (e.g. v8.0, v6.0)"
+              }
+            },
+            "appSettings": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "App settings array: [ { name: string, value: string }, ... ]\nSecrets should use Key Vault references:\n  @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/<name>/)\n"
+              }
+            },
+            "websiteLoadCertificates": {
+              "type": "string",
+              "defaultValue": "*",
+              "metadata": {
+                "description": "Certificate thumbprints to load into the Windows cert store. Use * for all certs available to this app."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags"
+              }
+            }
+          },
+          "variables": {
+            "platformSettings": [
+              {
+                "name": "WEBSITE_LOAD_CERTIFICATES",
+                "value": "[parameters('websiteLoadCertificates')]"
+              },
+              {
+                "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
+                "value": "~3"
+              },
+              {
+                "name": "XDT_MicrosoftApplicationInsights_Mode",
+                "value": "Recommended"
+              }
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2023-12-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[parameters('appServicePlanId')]",
+                "httpsOnly": true,
+                "siteConfig": {
+                  "alwaysOn": true,
+                  "netFrameworkVersion": "[parameters('netFrameworkVersion')]",
+                  "use32BitWorkerProcess": false,
+                  "managedPipelineMode": "Integrated",
+                  "http20Enabled": true,
+                  "minTlsVersion": "1.2",
+                  "ftpsState": "Disabled",
+                  "appSettings": "[flatten(createArray(variables('platformSettings'), parameters('appSettings')))]"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01', 'full').identity.principalId]"
+            },
+            "defaultHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01').defaultHostName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "keyVault",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[variables('kvName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('allTags')]"
+          },
+          "appPrincipalIds": {
+            "value": [
+              "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'webApp'), '2025-04-01').outputs.principalId.value]",
+              "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'apiApp'), '2025-04-01').outputs.principalId.value]",
+              "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'graphApp'), '2025-04-01').outputs.principalId.value]",
+              "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'authApp'), '2025-04-01').outputs.principalId.value]"
+            ]
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "9021328927941913873"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Key Vault resource name (3–24 chars, globally unique, alphanumeric + hyphens)"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags"
+              }
+            },
+            "appPrincipalIds": {
+              "type": "array",
+              "defaultValue": [],
+              "metadata": {
+                "description": "Object IDs (principalId) of system-assigned managed identities to grant KV access"
+              }
+            }
+          },
+          "variables": {
+            "kvSecretsUserRoleId": "4633458b-17de-408a-b874-0445c86b69e0",
+            "kvCertsUserRoleId": "db79e9a7-68ee-423b-be9e-b00bd69e8b11"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2023-07-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "family": "A",
+                  "name": "standard"
+                },
+                "tenantId": "[subscription().tenantId]",
+                "enableRbacAuthorization": true,
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 90,
+                "enabledForDeployment": false,
+                "enabledForTemplateDeployment": true,
+                "enabledForDiskEncryption": false,
+                "publicNetworkAccess": "Enabled"
+              }
+            },
+            {
+              "copy": {
+                "name": "secretsUserAssignment",
+                "count": "[length(parameters('appPrincipalIds'))]"
+              },
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('name'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('name')), parameters('appPrincipalIds')[copyIndex()], variables('kvSecretsUserRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('kvSecretsUserRoleId'))]",
+                "principalId": "[parameters('appPrincipalIds')[copyIndex()]]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('name'))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "certsUserAssignment",
+                "count": "[length(parameters('appPrincipalIds'))]"
+              },
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('name'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('name')), parameters('appPrincipalIds')[copyIndex()], variables('kvCertsUserRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('kvCertsUserRoleId'))]",
+                "principalId": "[parameters('appPrincipalIds')[copyIndex()]]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('name'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.KeyVault/vaults', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "uri": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults', parameters('name')), '2023-07-01').vaultUri]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'apiApp')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'authApp')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'graphApp')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'webApp')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "communicationServices",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[variables('acsName')]"
+          },
+          "emailServiceName": {
+            "value": "[variables('emailSvcName')]"
+          },
+          "dataLocation": {
+            "value": "[parameters('acsDataLocation')]"
+          },
+          "tags": {
+            "value": "[variables('allTags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "13209425216900243481"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "ACS resource name — must be globally unique"
+              }
+            },
+            "emailServiceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Email Communication Services resource name"
+              }
+            },
+            "dataLocation": {
+              "type": "string",
+              "defaultValue": "United States",
+              "metadata": {
+                "description": "Data residency location (e.g. \"United States\", \"Europe\")"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Communication/emailServices",
+              "apiVersion": "2023-04-01",
+              "name": "[parameters('emailServiceName')]",
+              "location": "global",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "dataLocation": "[parameters('dataLocation')]"
+              }
+            },
+            {
+              "type": "Microsoft.Communication/emailServices/domains",
+              "apiVersion": "2023-04-01",
+              "name": "[format('{0}/{1}', parameters('emailServiceName'), 'AzureManagedDomain')]",
+              "location": "global",
+              "properties": {
+                "domainManagement": "AzureManaged"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Communication/emailServices', parameters('emailServiceName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Communication/communicationServices",
+              "apiVersion": "2023-04-01",
+              "name": "[parameters('name')]",
+              "location": "global",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "dataLocation": "[parameters('dataLocation')]",
+                "linkedDomains": [
+                  "[resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), 'AzureManagedDomain')]"
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), 'AzureManagedDomain')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Communication/communicationServices', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "emailServiceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Communication/emailServices', parameters('emailServiceName'))]"
+            },
+            "emailServiceName": {
+              "type": "string",
+              "value": "[parameters('emailServiceName')]"
+            },
+            "managedDomainId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), 'AzureManagedDomain')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "resourceGroupName": {
+      "type": "string",
+      "value": "[variables('rgName')]"
+    },
+    "webAppHostName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'webApp'), '2025-04-01').outputs.defaultHostName.value]"
+    },
+    "apiAppHostName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'apiApp'), '2025-04-01').outputs.defaultHostName.value]"
+    },
+    "graphAppHostName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'graphApp'), '2025-04-01').outputs.defaultHostName.value]"
+    },
+    "authAppHostName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'authApp'), '2025-04-01').outputs.defaultHostName.value]"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'keyVault'), '2025-04-01').outputs.name.value]"
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'keyVault'), '2025-04-01').outputs.uri.value]"
+    },
+    "appInsightsName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.appInsightsName.value]"
+    },
+    "acsResourceName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'communicationServices'), '2025-04-01').outputs.name.value]"
+    },
+    "resolvedWebClientId": {
+      "type": "string",
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.webClientId.value, ''), parameters('webClientId'))]"
+    },
+    "resolvedApiClientId": {
+      "type": "string",
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.apiClientId.value, ''), parameters('apiClientId'))]"
+    },
+    "resolvedGraphClientId": {
+      "type": "string",
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
+    },
+    "resolvedAuthClientId": {
+      "type": "string",
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.authClientId.value, ''), parameters('authClientId'))]"
+    }
+  }
+}

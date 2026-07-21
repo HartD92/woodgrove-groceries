@@ -1,0 +1,292 @@
+# =============================================================================
+# Woodgrove Groceries — Infrastructure Deploy
+#
+# Uses OpenID Connect (OIDC) federated authentication — NO stored secrets.
+# The GitHub Actions runner exchanges its OIDC token for an Azure access token
+# via the pre-provisioned deployer app registration and its federated identity
+# credential (FIC).
+#
+# Required GitHub repository variables (Settings → Secrets and variables →
+# Actions → Variables):
+#   AZURE_CLIENT_ID       — Application (client) ID of the GitHub Actions deployer
+#                           app registration (created in the bootstrap step)
+#   AZURE_TENANT_ID       — Entra tenant ID (External ID / CIAM tenant)
+#   AZURE_SUBSCRIPTION_ID — Azure subscription ID
+#
+# Required GitHub Environment (optional but recommended for approval gate):
+#   Name:   azure-infra   (create under Settings → Environments)
+#   Set required reviewers for production safety.
+# =============================================================================
+
+name: Deploy Infrastructure
+
+on:
+  # Manual trigger — primary path; allows env selection
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (matches environmentName Bicep param)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      provisionEntraApps:
+        description: 'Provision Entra app registrations (true = create/update, false = use existing IDs)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      rotate_web_secret:
+        description: 'Force rotation of web-client-secret in Key Vault (even if the secret already exists). Triggers expired-credential pruning on the app registration.'
+        required: false
+        default: false
+        type: boolean
+
+  # Auto-trigger on pushes to main that touch infra/**
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/**'
+      - '.github/workflows/deploy-infra.yml'
+
+# Minimal permissions: OIDC token write + source read
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Bicep deploy → Azure (${{ github.event.inputs.environment || 'dev' }})
+    runs-on: ubuntu-latest
+
+    # Gate through the GitHub Environment for approval (optional but recommended)
+    environment: azure-infra
+
+    env:
+      ENV_NAME: ${{ github.event.inputs.environment || 'dev' }}
+      PROVISION_ENTRA: ${{ github.event.inputs.provisionEntraApps || 'true' }}
+      LOCATION: eastus2
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1. Checkout
+      # ------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # 2. Azure Login via OIDC federated credential (no stored secret)
+      # ------------------------------------------------------------------
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # ------------------------------------------------------------------
+      # 3. Ensure Bicep CLI is up to date + MS Graph extension available
+      #    The extension is declared in infra/bicepconfig.json and is
+      #    auto-restored from MCR when `az bicep build` / deployment runs.
+      # ------------------------------------------------------------------
+      - name: Install / upgrade Bicep CLI
+        run: az bicep install
+
+      - name: Validate Bicep template (lint + build)
+        run: |
+          az bicep lint --file infra/main.bicep
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+        # build to stdout discards the JSON ARM output; we just want exit code
+
+      # ------------------------------------------------------------------
+      # 4. What-if (plan) — shows changes without applying them
+      # ------------------------------------------------------------------
+      - name: What-if (deployment preview)
+        run: |
+          az deployment sub what-if \
+            --name "woodgrove-whatif-${ENV_NAME}-${{ github.run_number }}" \
+            --location "$LOCATION" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+                         environmentName="$ENV_NAME" \
+                         provisionEntraApps="$PROVISION_ENTRA"
+
+      # ------------------------------------------------------------------
+      # 5. Deploy
+      # ------------------------------------------------------------------
+      - name: Deploy infrastructure
+        run: |
+          az deployment sub create \
+            --name "woodgrove-deploy-${ENV_NAME}-${{ github.run_number }}" \
+            --location "$LOCATION" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+                         environmentName="$ENV_NAME" \
+                         provisionEntraApps="$PROVISION_ENTRA" \
+            --output json | tee deploy-output.json
+
+      # ------------------------------------------------------------------
+      # 6. Post-deploy: web-client-secret idempotency guard
+      #
+      #    • Secret already in Key Vault AND rotate_web_secret=false → SKIP
+      #    • Secret absent (first provision) + provisionEntraApps=true  → CREATE
+      #    • rotate_web_secret=true → FORCE RESET + update KV + prune expired creds
+      #
+      #    Runs when provisionEntraApps=true (normal deploys) OR
+      #    rotate_web_secret=true (explicit rotation dispatch).
+      # ------------------------------------------------------------------
+      - name: Create or rotate web client secret (idempotent)
+        if: env.PROVISION_ENTRA == 'true' || github.event.inputs.rotate_web_secret == 'true'
+        run: |
+          set -euo pipefail
+
+          WEB_CLIENT_ID=$(python3 -c "
+          import json, sys
+          data = json.load(open('deploy-output.json'))
+          print(data['properties']['outputs']['resolvedWebClientId']['value'])
+          ")
+          KV_NAME=$(python3 -c "
+          import json, sys
+          data = json.load(open('deploy-output.json'))
+          print(data['properties']['outputs']['keyVaultName']['value'])
+          ")
+
+          echo "::add-mask::$WEB_CLIENT_ID"
+
+          ROTATE="${{ github.event.inputs.rotate_web_secret }}"
+          ROTATE="${ROTATE:-false}"  # push trigger has no inputs → normalise to 'false'
+
+          # ----------------------------------------------------------------
+          # Check whether web-client-secret already exists in Key Vault.
+          # A "not found" response is expected on first provision — not an
+          # error.  Temporarily disable exit-on-error to capture the code.
+          # ----------------------------------------------------------------
+          set +e
+          SECRET_CHECK=$(az keyvault secret show \
+            --vault-name "$KV_NAME" \
+            --name web-client-secret \
+            --query "id" \
+            --output tsv 2>/dev/null)
+          KV_EXIT=$?
+          set -e
+
+          KV_SECRET_EXISTS=false
+          if [ "$KV_EXIT" -eq 0 ] && [ -n "$SECRET_CHECK" ]; then
+            KV_SECRET_EXISTS=true
+          fi
+
+          if [ "$KV_SECRET_EXISTS" = "true" ] && [ "$ROTATE" != "true" ]; then
+            # ----------------------------------------------------------------
+            # Secret present, no rotation requested → idempotent skip
+            # ----------------------------------------------------------------
+            echo "ℹ️  web-client-secret already present in Key Vault — skipping creation (use rotate_web_secret to force rotation)"
+
+          elif [ "$ROTATE" = "true" ]; then
+            # ----------------------------------------------------------------
+            # Explicit rotation — reset credential, update KV, prune expired creds
+            # --append so the new credential is live before old ones are pruned
+            # (avoids a window with no valid secret during rotation)
+            # ----------------------------------------------------------------
+            echo "rotate_web_secret=true — forcing credential rotation for app $WEB_CLIENT_ID"
+
+            SECRET_JSON=$(az ad app credential reset \
+              --id "$WEB_CLIENT_ID" \
+              --append \
+              --display-name "cicd-managed-${ENV_NAME}" \
+              --years 1 \
+              --output json)
+
+            NEW_KEY_ID=$(echo "$SECRET_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['keyId'])")
+            CLIENT_SECRET=$(echo "$SECRET_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['password'])")
+            echo "::add-mask::$CLIENT_SECRET"
+
+            az keyvault secret set \
+              --vault-name "$KV_NAME" \
+              --name web-client-secret \
+              --value "$CLIENT_SECRET" \
+              --output none
+
+            echo "✅ web-client-secret rotated in Key Vault $KV_NAME"
+
+            # ----------------------------------------------------------------
+            # Prune expired credentials from the app registration.
+            # Defensive: listing/parsing failures are non-fatal — skip pruning
+            # rather than risk deleting a live credential on a transient error.
+            # ----------------------------------------------------------------
+            echo "Pruning expired credentials from app registration $WEB_CLIENT_ID..."
+            set +e
+            CRED_LIST=$(az ad app credential list --id "$WEB_CLIENT_ID" --output json 2>/dev/null)
+            PRUNE_EXIT=$?
+            set -e
+
+            if [ "$PRUNE_EXIT" -eq 0 ] && [ -n "$CRED_LIST" ]; then
+              EXPIRED_IDS=$(echo "$CRED_LIST" | NEW_KEY_ID="$NEW_KEY_ID" python3 -c "
+          import json, sys, os
+          from datetime import datetime, timezone
+          creds = json.load(sys.stdin)
+          new_key_id = os.environ.get('NEW_KEY_ID', '')
+          now = datetime.now(timezone.utc)
+          def is_expired(c):
+              if c.get('keyId', '') == new_key_id: return False
+              try:
+                  return datetime.fromisoformat(c.get('endDateTime', '').replace('Z', '+00:00')) < now
+              except Exception: return False
+          [print(c['keyId']) for c in creds if c.get('keyId') and is_expired(c)]
+          ")
+              for KID in $EXPIRED_IDS; do
+                echo "  Deleting expired credential keyId=$KID"
+                az ad app credential delete --id "$WEB_CLIENT_ID" --key-id "$KID" --output none 2>/dev/null \
+                  && echo "  ✓ Deleted $KID" \
+                  || echo "  ⚠️  Could not delete $KID — skipping (non-fatal)"
+              done
+              echo "Expired-credential pruning complete."
+            else
+              echo "⚠️  Could not list credentials for pruning — skipping (non-fatal)"
+            fi
+
+          else
+            # ----------------------------------------------------------------
+            # Secret absent — first provision with provisionEntraApps=true
+            # ----------------------------------------------------------------
+            echo "First provision: generating client secret for app $WEB_CLIENT_ID"
+
+            SECRET_JSON=$(az ad app credential reset \
+              --id "$WEB_CLIENT_ID" \
+              --append \
+              --display-name "cicd-managed-${ENV_NAME}" \
+              --years 1 \
+              --output json)
+
+            CLIENT_SECRET=$(echo "$SECRET_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['password'])")
+            echo "::add-mask::$CLIENT_SECRET"
+
+            az keyvault secret set \
+              --vault-name "$KV_NAME" \
+              --name web-client-secret \
+              --value "$CLIENT_SECRET" \
+              --output none
+
+            echo "✅ web-client-secret seeded into Key Vault $KV_NAME"
+          fi
+
+      # ------------------------------------------------------------------
+      # 7. Surface outputs as job summary
+      # ------------------------------------------------------------------
+      - name: Summarise deployment outputs
+        if: success()
+        run: |
+          echo "## Deployment Outputs" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`json" >> "$GITHUB_STEP_SUMMARY"
+          cat deploy-output.json | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          outputs = data.get('properties', {}).get('outputs', {})
+          print(json.dumps({k: v.get('value') for k, v in outputs.items()}, indent=2))
+          " >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"

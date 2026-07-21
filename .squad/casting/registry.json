@@ -1,0 +1,9 @@
+{
+  "agents": {
+    "lead-architect": { "persistent_name": "Morpheus", "universe": "The Matrix", "created_at": "2026-07-21T07:45:38-07:00", "legacy_named": false, "status": "active" },
+    "identity-auth": { "persistent_name": "Trinity", "universe": "The Matrix", "created_at": "2026-07-21T07:45:38-07:00", "legacy_named": false, "status": "active" },
+    "backend-api": { "persistent_name": "Tank", "universe": "The Matrix", "created_at": "2026-07-21T07:45:38-07:00", "legacy_named": false, "status": "active" },
+    "cloud-devops": { "persistent_name": "Dozer", "universe": "The Matrix", "created_at": "2026-07-21T07:45:38-07:00", "legacy_named": false, "status": "active" },
+    "frontend": { "persistent_name": "Switch", "universe": "The Matrix", "created_at": "2026-07-21T07:45:38-07:00", "legacy_named": false, "status": "active" }
+  }
+}

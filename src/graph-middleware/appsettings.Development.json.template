@@ -1,0 +1,26 @@
+{
+  "AzureAd": {
+    "Instance": "https://<tenant-name>.ciamlogin.com/",
+    "TenantId": "<tenant-id>",
+    "ClientId": "<client-id>",
+    "EnablePiiLogging": false,
+    "ClientCertificates": [
+      {
+       "SourceType": "StoreWithThumbprint",
+        "CertificateStorePath": "CurrentUser/My",
+        "CertificateThumbprint": "<cert-thumbprint>"
+      }]
+  },
+  "GraphApi": {
+    "BaseUrl": "https://graph.microsoft.com/v1.0/",
+    "Scopes": "https://graph.microsoft.com/.default"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "System.Net.Http.HttpClient": "Trace"
+    }
+  },
+  "AllowedHosts": "*"
+}

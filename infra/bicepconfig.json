@@ -1,0 +1,25 @@
+{
+  // =========================================================================
+  // Woodgrove Groceries — Bicep configuration
+  //
+  // Extensions are restored automatically by the Bicep CLI from the Microsoft
+  // Container Registry (MCR) before compilation.  No manual steps are needed
+  // provided the build agent has internet access.
+  //
+  // VERIFY: The extension version tag below ("1.0.0") reflects the GA release
+  //   announced August 2025.  If a newer patch has shipped, update the tag.
+  //   Latest tags: https://mcr.microsoft.com/v2/bicep/extensions/microsoftgraph/v1.0/tags/list
+  // =========================================================================
+
+  "experimentalFeaturesEnabled": {
+    // Required for Bicep CLI versions prior to 0.36 that shipped the GA
+    // Graph extension.  Safe to keep for forward-compat with older tooling.
+    "extensibility": true
+  },
+
+  "extensions": {
+    // Alias used in all Bicep files: `extension microsoftGraphV1`
+    // Maps to the stable (v1.0) Microsoft Graph Bicep extension.
+    "microsoftGraphV1": "br:mcr.microsoft.com/bicep/extensions/microsoftgraph/v1.0:1.0.0"
+  }
+}
