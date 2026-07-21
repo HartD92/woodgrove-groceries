@@ -1,27 +1,23 @@
 # =============================================================================
 # Woodgrove Groceries — Infrastructure Deploy
 #
-# Uses OpenID Connect (OIDC) federated authentication — NO stored secrets.
-# The GitHub Actions runner exchanges its OIDC token for an Azure access token
-# via the pre-provisioned deployer app registration and its federated identity
-# credential (FIC).
+# Two-identity deployment for split workforce / Entra External ID tenants:
+#   1. ENTRA_* identity logs into the CIAM / External ID tenant and provisions
+#      app registrations + service principals through Microsoft Graph.
+#   2. AZURE_* identity logs into the workforce tenant subscription and deploys
+#      Azure resources with provisionEntraApps=false.
 #
-# Required GitHub repository variables (Settings → Secrets and variables →
-# Actions → Variables):
-#   AZURE_CLIENT_ID       — Application (client) ID of the GitHub Actions deployer
-#                           app registration (created in the bootstrap step)
-#   AZURE_TENANT_ID       — Entra tenant ID (External ID / CIAM tenant)
-#   AZURE_SUBSCRIPTION_ID — Azure subscription ID
-#
-# Required GitHub Environment (optional but recommended for approval gate):
-#   Name:   azure-infra   (create under Settings → Environments)
-#   Set required reviewers for production safety.
+# Required GitHub repository variables:
+#   AZURE_CLIENT_ID       — Workforce tenant deploy app for ARM resources
+#   AZURE_TENANT_ID       — Workforce tenant ID
+#   AZURE_SUBSCRIPTION_ID — Azure subscription ID in the workforce tenant
+#   ENTRA_CLIENT_ID       — External ID tenant deploy app for CIAM app registrations
+#   ENTRA_TENANT_ID       — External ID / CIAM tenant ID
 # =============================================================================
 
 name: Deploy Infrastructure
 
 on:
-  # Manual trigger — primary path; allows env selection
   workflow_dispatch:
     inputs:
       environment:
@@ -33,21 +29,12 @@ on:
           - dev
           - staging
           - prod
-      provisionEntraApps:
-        description: 'Provision Entra app registrations (true = create/update, false = use existing IDs)'
-        required: true
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
       rotate_web_secret:
-        description: 'Force rotation of web-client-secret in Key Vault (even if the secret already exists). Triggers expired-credential pruning on the app registration.'
+        description: 'Force rotation of web-client-secret in Key Vault. Also prunes expired credentials on the CIAM app registration.'
         required: false
         default: false
         type: boolean
 
-  # Auto-trigger on pushes to main that touch infra/**
   push:
     branches:
       - main
@@ -55,238 +42,581 @@ on:
       - 'infra/**'
       - '.github/workflows/deploy-infra.yml'
 
-# Minimal permissions: OIDC token write + source read
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  deploy:
-    name: Bicep deploy → Azure (${{ github.event.inputs.environment || 'dev' }})
+  entra-provision:
+    name: Provision CIAM apps → ExtID (${{ inputs.environment || 'dev' }})
     runs-on: ubuntu-latest
-
-    # Gate through the GitHub Environment for approval (optional but recommended)
     environment: azure-infra
 
+    outputs:
+      web_client_id: ${{ steps.provision.outputs.web_client_id }}
+      api_client_id: ${{ steps.provision.outputs.api_client_id }}
+      graph_client_id: ${{ steps.provision.outputs.graph_client_id }}
+      auth_client_id: ${{ steps.provision.outputs.auth_client_id }}
+
     env:
-      ENV_NAME: ${{ github.event.inputs.environment || 'dev' }}
-      PROVISION_ENTRA: ${{ github.event.inputs.provisionEntraApps || 'true' }}
-      LOCATION: eastus2
+      ENV_NAME: ${{ inputs.environment || 'dev' }}
+      WEB_DOMAIN: woodgrovedemo.com
 
     steps:
-      # ------------------------------------------------------------------
-      # 1. Checkout
-      # ------------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ------------------------------------------------------------------
-      # 2. Azure Login via OIDC federated credential (no stored secret)
-      # ------------------------------------------------------------------
-      - name: Azure login (OIDC)
+      - name: Azure login to ExtID tenant (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.ENTRA_CLIENT_ID }}
+          tenant-id: ${{ vars.ENTRA_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Provision CIAM app registrations and service principals
+        id: provision
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $envName = $env:ENV_NAME
+          $webDomain = $env:WEB_DOMAIN
+          $msGraphAppId = '00000003-0000-0000-c000-000000000000'
+
+          # VERIFY: Permission IDs are stable Microsoft Graph IDs; confirm against
+          # https://learn.microsoft.com/en-us/graph/permissions-reference before changing.
+          $graphOpenIdScopeId = '37f7f235-527c-4136-accd-4a02d197296e'
+          $graphOfflineAccessScopeId = '7427e0e9-2fba-42fe-b0c0-848c9e6a8182'
+          $graphProfileScopeId = '14dad69e-099b-42c9-810b-d002981feec1'
+          $graphUserReadWriteAllRoleId = '741f803b-c850-494e-b5df-cde7c675a1ca'
+          $graphGroupReadWriteAllRoleId = '62a82d76-70ea-41e2-9197-370581804d09'
+          $graphDirectoryReadWriteAllRoleId = '19dbc75e-c2e2-444c-a770-ec69d8559fc7'
+
+          function New-StableGuid {
+            param([Parameter(Mandatory)][string[]] $Parts)
+            $inputText = ($Parts -join '|')
+            $md5 = [System.Security.Cryptography.MD5]::Create()
+            $hash = $md5.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($inputText))
+            $hash[6] = ($hash[6] -band 0x0f) -bor 0x30
+            $hash[8] = ($hash[8] -band 0x3f) -bor 0x80
+            return ([Guid]::new($hash)).ToString()
+          }
+
+          function Get-AppByDisplayName {
+            param([Parameter(Mandatory)][string] $DisplayName)
+            $apps = az ad app list --display-name $DisplayName --output json | ConvertFrom-Json
+            return @($apps | Where-Object { $_.displayName -eq $DisplayName } | Select-Object -First 1)[0]
+          }
+
+          function Ensure-AppRegistration {
+            param([Parameter(Mandatory)][string] $DisplayName)
+            $app = Get-AppByDisplayName -DisplayName $DisplayName
+            if ($null -eq $app) {
+              Write-Host "Creating app registration: $DisplayName"
+              $app = az ad app create `
+                --display-name $DisplayName `
+                --sign-in-audience AzureADMyOrg `
+                --output json | ConvertFrom-Json
+            }
+            else {
+              Write-Host "Reusing app registration: $DisplayName ($($app.appId))"
+            }
+
+            return az ad app show --id $app.appId --output json | ConvertFrom-Json
+          }
+
+          function Invoke-GraphPatch {
+            param(
+              [Parameter(Mandatory)][string] $Uri,
+              [Parameter(Mandatory)] $Body
+            )
+            $bodyPath = Join-Path $PWD '.gha-graph-body.json'
+            $Body | ConvertTo-Json -Depth 30 | Out-File -FilePath $bodyPath -Encoding utf8
+            az rest `
+              --method PATCH `
+              --uri $Uri `
+              --headers 'Content-Type=application/json' `
+              --body "@$bodyPath" `
+              --output none
+            Remove-Item $bodyPath -Force
+          }
+
+          function Ensure-ServicePrincipal {
+            param([Parameter(Mandatory)][string] $AppId)
+            $sp = $null
+            try {
+              $sp = az ad sp show --id $AppId --output json 2>$null | ConvertFrom-Json
+            }
+            catch {
+              $sp = $null
+            }
+
+            if ($null -eq $sp) {
+              Write-Host "Creating service principal for appId $AppId"
+              $sp = az ad sp create --id $AppId --output json | ConvertFrom-Json
+            }
+            else {
+              Write-Host "Reusing service principal for appId $AppId"
+            }
+
+            return $sp
+          }
+
+          function Ensure-AppRoleAssignment {
+            param(
+              [Parameter(Mandatory)][string] $PrincipalServicePrincipalId,
+              [Parameter(Mandatory)][string] $ResourceServicePrincipalId,
+              [Parameter(Mandatory)][string] $AppRoleId
+            )
+
+            $assignments = az rest `
+              --method GET `
+              --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalServicePrincipalId/appRoleAssignments" `
+              --output json | ConvertFrom-Json
+            $existing = @($assignments.value | Where-Object {
+              $_.resourceId -eq $ResourceServicePrincipalId -and $_.appRoleId -eq $AppRoleId
+            })
+
+            if ($existing.Count -eq 0) {
+              $body = [ordered]@{
+                principalId = $PrincipalServicePrincipalId
+                resourceId = $ResourceServicePrincipalId
+                appRoleId = $AppRoleId
+              }
+              $bodyPath = Join-Path $PWD '.gha-app-role-assignment.json'
+              $body | ConvertTo-Json -Depth 5 | Out-File -FilePath $bodyPath -Encoding utf8
+              az rest `
+                --method POST `
+                --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalServicePrincipalId/appRoleAssignments" `
+                --headers 'Content-Type=application/json' `
+                --body "@$bodyPath" `
+                --output none
+              Remove-Item $bodyPath -Force
+            }
+          }
+
+          function Ensure-OAuth2PermissionGrant {
+            param(
+              [Parameter(Mandatory)][string] $ClientServicePrincipalId,
+              [Parameter(Mandatory)][string] $ResourceServicePrincipalId,
+              [Parameter(Mandatory)][string] $Scope
+            )
+
+            $encodedFilter = [System.Uri]::EscapeDataString("clientId eq '$ClientServicePrincipalId' and resourceId eq '$ResourceServicePrincipalId'")
+            $grants = az rest `
+              --method GET `
+              --uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=$encodedFilter" `
+              --output json | ConvertFrom-Json
+            $existing = @($grants.value | Select-Object -First 1)[0]
+            $requestedScopes = @($Scope -split ' ' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+
+            if ($null -ne $existing) {
+              $currentScopes = @($existing.scope -split ' ' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+              $mergedScopes = @($currentScopes + $requestedScopes | Select-Object -Unique)
+              $mergedScope = ($mergedScopes -join ' ')
+              if ($mergedScope -ne $existing.scope) {
+                $body = [ordered]@{ scope = $mergedScope }
+                $bodyPath = Join-Path $PWD '.gha-oauth2-grant.json'
+                $body | ConvertTo-Json -Depth 5 | Out-File -FilePath $bodyPath -Encoding utf8
+                az rest `
+                  --method PATCH `
+                  --uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants/$($existing.id)" `
+                  --headers 'Content-Type=application/json' `
+                  --body "@$bodyPath" `
+                  --output none
+                Remove-Item $bodyPath -Force
+              }
+              return
+            }
+
+            $body = [ordered]@{
+              clientId = $ClientServicePrincipalId
+              consentType = 'AllPrincipals'
+              resourceId = $ResourceServicePrincipalId
+              scope = $Scope
+            }
+            $bodyPath = Join-Path $PWD '.gha-oauth2-grant.json'
+            $body | ConvertTo-Json -Depth 5 | Out-File -FilePath $bodyPath -Encoding utf8
+            az rest `
+              --method POST `
+              --uri 'https://graph.microsoft.com/v1.0/oauth2PermissionGrants' `
+              --headers 'Content-Type=application/json' `
+              --body "@$bodyPath" `
+              --output none
+            Remove-Item $bodyPath -Force
+          }
+
+          $apiDisplayName = "woodgrove-groceries-api ($envName)"
+          $webDisplayName = "woodgrove-groceries ($envName)"
+          $graphDisplayName = "woodgrove-graph-middleware ($envName)"
+          $authDisplayName = "woodgrove-auth-api ($envName)"
+
+          $apiApp = Ensure-AppRegistration -DisplayName $apiDisplayName
+          $apiScope = @($apiApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq 'access_as_user' } | Select-Object -First 1)[0]
+          $apiAccessAsUserScopeId = if ($apiScope -and $apiScope.id) { $apiScope.id } else { New-StableGuid -Parts @($envName, 'woodgrove-api', 'access_as_user') }
+
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$($apiApp.id)" `
+            -Body ([ordered]@{
+              signInAudience = 'AzureADMyOrg'
+              identifierUris = @("api://woodgrove-groceries-api-$envName")
+              api = [ordered]@{
+                requestedAccessTokenVersion = 2
+                oauth2PermissionScopes = @(
+                  [ordered]@{
+                    id = $apiAccessAsUserScopeId
+                    adminConsentDisplayName = 'Access woodgrove-groceries-api as the signed-in user'
+                    adminConsentDescription = 'Allows the app to access woodgrove-groceries-api on behalf of the signed-in user.'
+                    userConsentDisplayName = 'Access woodgrove-groceries-api'
+                    userConsentDescription = 'Allows this app to access woodgrove-groceries-api on your behalf.'
+                    value = 'access_as_user'
+                    type = 'User'
+                    isEnabled = $true
+                  }
+                )
+              }
+            })
+          $apiApp = az ad app show --id $apiApp.appId --output json | ConvertFrom-Json
+          $apiSp = Ensure-ServicePrincipal -AppId $apiApp.appId
+
+          $webApp = Ensure-AppRegistration -DisplayName $webDisplayName
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$($webApp.id)" `
+            -Body ([ordered]@{
+              signInAudience = 'AzureADMyOrg'
+              web = [ordered]@{
+                redirectUris = @("https://$webDomain/signin-oidc")
+                implicitGrantSettings = [ordered]@{
+                  enableIdTokenIssuance = $true
+                  enableAccessTokenIssuance = $false
+                }
+              }
+              requiredResourceAccess = @(
+                [ordered]@{
+                  resourceAppId = $apiApp.appId
+                  resourceAccess = @([ordered]@{ id = $apiAccessAsUserScopeId; type = 'Scope' })
+                }
+                [ordered]@{
+                  resourceAppId = $msGraphAppId
+                  resourceAccess = @(
+                    [ordered]@{ id = $graphOpenIdScopeId; type = 'Scope' }
+                    [ordered]@{ id = $graphOfflineAccessScopeId; type = 'Scope' }
+                    [ordered]@{ id = $graphProfileScopeId; type = 'Scope' }
+                  )
+                }
+              )
+            })
+          $webApp = az ad app show --id $webApp.appId --output json | ConvertFrom-Json
+          $webSp = Ensure-ServicePrincipal -AppId $webApp.appId
+
+          $graphApp = Ensure-AppRegistration -DisplayName $graphDisplayName
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$($graphApp.id)" `
+            -Body ([ordered]@{
+              signInAudience = 'AzureADMyOrg'
+              requiredResourceAccess = @(
+                [ordered]@{
+                  resourceAppId = $msGraphAppId
+                  resourceAccess = @(
+                    [ordered]@{ id = $graphUserReadWriteAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphGroupReadWriteAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphDirectoryReadWriteAllRoleId; type = 'Role' }
+                  )
+                }
+              )
+            })
+          $graphApp = az ad app show --id $graphApp.appId --output json | ConvertFrom-Json
+          $graphSp = Ensure-ServicePrincipal -AppId $graphApp.appId
+
+          $authApp = Ensure-AppRegistration -DisplayName $authDisplayName
+          $authRole = @($authApp.appRoles | Where-Object { $_.value -eq 'CustomAuthenticationExtension.Receive.Payload' } | Select-Object -First 1)[0]
+          $authRoleId = if ($authRole -and $authRole.id) { $authRole.id } else { New-StableGuid -Parts @($envName, 'auth-api', 'CustomAuthenticationExtension.Receive.Payload') }
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$($authApp.id)" `
+            -Body ([ordered]@{
+              signInAudience = 'AzureADMyOrg'
+              appRoles = @(
+                [ordered]@{
+                  id = $authRoleId
+                  displayName = 'CustomAuthenticationExtension.Receive.Payload'
+                  description = 'Allows the custom authentication extension to receive payloads from Entra External ID'
+                  value = 'CustomAuthenticationExtension.Receive.Payload'
+                  allowedMemberTypes = @('Application')
+                  isEnabled = $true
+                }
+              )
+            })
+          $authApp = az ad app show --id $authApp.appId --output json | ConvertFrom-Json
+          $authSp = Ensure-ServicePrincipal -AppId $authApp.appId
+
+          $msGraphSp = az ad sp show --id $msGraphAppId --output json | ConvertFrom-Json
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphUserReadWriteAllRoleId
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphGroupReadWriteAllRoleId
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphDirectoryReadWriteAllRoleId
+          Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $apiSp.id -Scope 'access_as_user'
+          Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -Scope 'openid offline_access profile'
+
+          "web_client_id=$($webApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "api_client_id=$($apiApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "graph_client_id=$($graphApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "auth_client_id=$($authApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+  azure-deploy:
+    name: Deploy Azure resources → workforce (${{ inputs.environment || 'dev' }})
+    runs-on: ubuntu-latest
+    needs: entra-provision
+    environment: azure-infra
+
+    env:
+      ENV_NAME: ${{ inputs.environment || 'dev' }}
+      LOCATION: eastus2
+      ROTATE_WEB_SECRET: ${{ inputs.rotate_web_secret || false }}
+      WEB_CLIENT_ID: ${{ needs.entra-provision.outputs.web_client_id }}
+      API_CLIENT_ID: ${{ needs.entra-provision.outputs.api_client_id }}
+      GRAPH_CLIENT_ID: ${{ needs.entra-provision.outputs.graph_client_id }}
+      AUTH_CLIENT_ID: ${{ needs.entra-provision.outputs.auth_client_id }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure login to workforce tenant (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      # ------------------------------------------------------------------
-      # 3. Ensure Bicep CLI is up to date + MS Graph extension available
-      #    The extension is declared in infra/bicepconfig.json and is
-      #    auto-restored from MCR when `az bicep build` / deployment runs.
-      # ------------------------------------------------------------------
       - name: Install / upgrade Bicep CLI
         run: az bicep install
 
       - name: Validate Bicep template (lint + build)
+        shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           az bicep lint --file infra/main.bicep
-          az bicep build --file infra/main.bicep --stdout > /dev/null
-        # build to stdout discards the JSON ARM output; we just want exit code
+          az bicep build --file infra/main.bicep --stdout | Out-Null
 
-      # ------------------------------------------------------------------
-      # 4. What-if (plan) — shows changes without applying them
-      # ------------------------------------------------------------------
       - name: What-if (deployment preview)
+        shell: pwsh
         run: |
-          az deployment sub what-if \
-            --name "woodgrove-whatif-${ENV_NAME}-${{ github.run_number }}" \
-            --location "$LOCATION" \
-            --template-file infra/main.bicep \
-            --parameters infra/main.bicepparam \
-                         environmentName="$ENV_NAME" \
-                         provisionEntraApps="$PROVISION_ENTRA"
+          $ErrorActionPreference = 'Stop'
+          az deployment sub what-if `
+            --name "woodgrove-whatif-$($env:ENV_NAME)-${{ github.run_number }}" `
+            --location $env:LOCATION `
+            --template-file infra/main.bicep `
+            --parameters infra/main.bicepparam `
+                         environmentName=$env:ENV_NAME `
+                         provisionEntraApps=false `
+                         webClientId=$env:WEB_CLIENT_ID `
+                         apiClientId=$env:API_CLIENT_ID `
+                         graphClientId=$env:GRAPH_CLIENT_ID `
+                         authClientId=$env:AUTH_CLIENT_ID
 
-      # ------------------------------------------------------------------
-      # 5. Deploy
-      # ------------------------------------------------------------------
       - name: Deploy infrastructure
+        shell: pwsh
         run: |
-          az deployment sub create \
-            --name "woodgrove-deploy-${ENV_NAME}-${{ github.run_number }}" \
-            --location "$LOCATION" \
-            --template-file infra/main.bicep \
-            --parameters infra/main.bicepparam \
-                         environmentName="$ENV_NAME" \
-                         provisionEntraApps="$PROVISION_ENTRA" \
-            --output json | tee deploy-output.json
+          $ErrorActionPreference = 'Stop'
+          az deployment sub create `
+            --name "woodgrove-deploy-$($env:ENV_NAME)-${{ github.run_number }}" `
+            --location $env:LOCATION `
+            --template-file infra/main.bicep `
+            --parameters infra/main.bicepparam `
+                         environmentName=$env:ENV_NAME `
+                         provisionEntraApps=false `
+                         webClientId=$env:WEB_CLIENT_ID `
+                         apiClientId=$env:API_CLIENT_ID `
+                         graphClientId=$env:GRAPH_CLIENT_ID `
+                         authClientId=$env:AUTH_CLIENT_ID `
+            --output json | Tee-Object -FilePath deploy-output.json | Out-Null
 
-      # ------------------------------------------------------------------
-      # 6. Post-deploy: web-client-secret idempotency guard
-      #
-      #    • Secret already in Key Vault AND rotate_web_secret=false → SKIP
-      #    • Secret absent (first provision) + provisionEntraApps=true  → CREATE
-      #    • rotate_web_secret=true → FORCE RESET + update KV + prune expired creds
-      #
-      #    Runs when provisionEntraApps=true (normal deploys) OR
-      #    rotate_web_secret=true (explicit rotation dispatch).
-      # ------------------------------------------------------------------
-      - name: Create or rotate web client secret (idempotent)
-        if: env.PROVISION_ENTRA == 'true' || github.event.inputs.rotate_web_secret == 'true'
+      - name: Azure login to ExtID tenant for redirect URI sync
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.ENTRA_CLIENT_ID }}
+          tenant-id: ${{ vars.ENTRA_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Synchronize app-service redirect URIs in ExtID
+        shell: pwsh
         run: |
-          set -euo pipefail
+          $ErrorActionPreference = 'Stop'
+          $outputs = (Get-Content deploy-output.json -Raw | ConvertFrom-Json).properties.outputs
+          $webHost = $outputs.webAppHostName.value
+          $authHost = $outputs.authAppHostName.value
+          $webObjectId = az ad app show --id $env:WEB_CLIENT_ID --query id -o tsv
+          $authObjectId = az ad app show --id $env:AUTH_CLIENT_ID --query id -o tsv
 
-          WEB_CLIENT_ID=$(python3 -c "
-          import json, sys
-          data = json.load(open('deploy-output.json'))
-          print(data['properties']['outputs']['resolvedWebClientId']['value'])
-          ")
-          KV_NAME=$(python3 -c "
-          import json, sys
-          data = json.load(open('deploy-output.json'))
-          print(data['properties']['outputs']['keyVaultName']['value'])
-          ")
-
-          echo "::add-mask::$WEB_CLIENT_ID"
-
-          ROTATE="${{ github.event.inputs.rotate_web_secret }}"
-          ROTATE="${ROTATE:-false}"  # push trigger has no inputs → normalise to 'false'
-
-          # ----------------------------------------------------------------
-          # Check whether web-client-secret already exists in Key Vault.
-          # A "not found" response is expected on first provision — not an
-          # error.  Temporarily disable exit-on-error to capture the code.
-          # ----------------------------------------------------------------
-          set +e
-          SECRET_CHECK=$(az keyvault secret show \
-            --vault-name "$KV_NAME" \
-            --name web-client-secret \
-            --query "id" \
-            --output tsv 2>/dev/null)
-          KV_EXIT=$?
-          set -e
-
-          KV_SECRET_EXISTS=false
-          if [ "$KV_EXIT" -eq 0 ] && [ -n "$SECRET_CHECK" ]; then
-            KV_SECRET_EXISTS=true
-          fi
-
-          if [ "$KV_SECRET_EXISTS" = "true" ] && [ "$ROTATE" != "true" ]; then
-            # ----------------------------------------------------------------
-            # Secret present, no rotation requested → idempotent skip
-            # ----------------------------------------------------------------
-            echo "ℹ️  web-client-secret already present in Key Vault — skipping creation (use rotate_web_secret to force rotation)"
-
-          elif [ "$ROTATE" = "true" ]; then
-            # ----------------------------------------------------------------
-            # Explicit rotation — reset credential, update KV, prune expired creds
-            # --append so the new credential is live before old ones are pruned
-            # (avoids a window with no valid secret during rotation)
-            # ----------------------------------------------------------------
-            echo "rotate_web_secret=true — forcing credential rotation for app $WEB_CLIENT_ID"
-
-            SECRET_JSON=$(az ad app credential reset \
-              --id "$WEB_CLIENT_ID" \
-              --append \
-              --display-name "cicd-managed-${ENV_NAME}" \
-              --years 1 \
-              --output json)
-
-            NEW_KEY_ID=$(echo "$SECRET_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['keyId'])")
-            CLIENT_SECRET=$(echo "$SECRET_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['password'])")
-            echo "::add-mask::$CLIENT_SECRET"
-
-            az keyvault secret set \
-              --vault-name "$KV_NAME" \
-              --name web-client-secret \
-              --value "$CLIENT_SECRET" \
+          function Invoke-GraphPatch {
+            param(
+              [Parameter(Mandatory)][string] $Uri,
+              [Parameter(Mandatory)] $Body
+            )
+            $bodyPath = Join-Path $PWD '.gha-graph-body.json'
+            $Body | ConvertTo-Json -Depth 20 | Out-File -FilePath $bodyPath -Encoding utf8
+            az rest `
+              --method PATCH `
+              --uri $Uri `
+              --headers 'Content-Type=application/json' `
+              --body "@$bodyPath" `
               --output none
+            Remove-Item $bodyPath -Force
+          }
 
-            echo "✅ web-client-secret rotated in Key Vault $KV_NAME"
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$webObjectId" `
+            -Body ([ordered]@{
+              web = [ordered]@{
+                redirectUris = @(
+                  "https://$webHost/signin-oidc"
+                  'https://woodgrovedemo.com/signin-oidc'
+                )
+                logoutUrl = "https://$webHost/signout-oidc"
+                implicitGrantSettings = [ordered]@{
+                  enableIdTokenIssuance = $true
+                  enableAccessTokenIssuance = $false
+                }
+              }
+            })
 
-            # ----------------------------------------------------------------
-            # Prune expired credentials from the app registration.
-            # Defensive: listing/parsing failures are non-fatal — skip pruning
-            # rather than risk deleting a live credential on a transient error.
-            # ----------------------------------------------------------------
-            echo "Pruning expired credentials from app registration $WEB_CLIENT_ID..."
-            set +e
-            CRED_LIST=$(az ad app credential list --id "$WEB_CLIENT_ID" --output json 2>/dev/null)
-            PRUNE_EXIT=$?
-            set -e
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$authObjectId" `
+            -Body ([ordered]@{
+              web = [ordered]@{
+                redirectUris = @("https://$authHost/")
+              }
+            })
 
-            if [ "$PRUNE_EXIT" -eq 0 ] && [ -n "$CRED_LIST" ]; then
-              EXPIRED_IDS=$(echo "$CRED_LIST" | NEW_KEY_ID="$NEW_KEY_ID" python3 -c "
-          import json, sys, os
-          from datetime import datetime, timezone
-          creds = json.load(sys.stdin)
-          new_key_id = os.environ.get('NEW_KEY_ID', '')
-          now = datetime.now(timezone.utc)
-          def is_expired(c):
-              if c.get('keyId', '') == new_key_id: return False
-              try:
-                  return datetime.fromisoformat(c.get('endDateTime', '').replace('Z', '+00:00')) < now
-              except Exception: return False
-          [print(c['keyId']) for c in creds if c.get('keyId') and is_expired(c)]
-          ")
-              for KID in $EXPIRED_IDS; do
-                echo "  Deleting expired credential keyId=$KID"
-                az ad app credential delete --id "$WEB_CLIENT_ID" --key-id "$KID" --output none 2>/dev/null \
-                  && echo "  ✓ Deleted $KID" \
-                  || echo "  ⚠️  Could not delete $KID — skipping (non-fatal)"
-              done
-              echo "Expired-credential pruning complete."
-            else
-              echo "⚠️  Could not list credentials for pruning — skipping (non-fatal)"
-            fi
+      - name: Azure login to workforce tenant for Key Vault check
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-          else
-            # ----------------------------------------------------------------
-            # Secret absent — first provision with provisionEntraApps=true
-            # ----------------------------------------------------------------
-            echo "First provision: generating client secret for app $WEB_CLIENT_ID"
+      - name: Check web-client-secret in Key Vault
+        id: web_secret_check
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $outputs = (Get-Content deploy-output.json -Raw | ConvertFrom-Json).properties.outputs
+          $kvName = $outputs.keyVaultName.value
+          $rotate = [System.Convert]::ToBoolean($env:ROTATE_WEB_SECRET)
 
-            SECRET_JSON=$(az ad app credential reset \
-              --id "$WEB_CLIENT_ID" \
-              --append \
-              --display-name "cicd-managed-${ENV_NAME}" \
-              --years 1 \
-              --output json)
+          $secretId = $null
+          try {
+            $secretId = az keyvault secret show `
+              --vault-name $kvName `
+              --name web-client-secret `
+              --query id `
+              --output tsv 2>$null
+          }
+          catch {
+            $secretId = $null
+          }
 
-            CLIENT_SECRET=$(echo "$SECRET_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['password'])")
-            echo "::add-mask::$CLIENT_SECRET"
+          $exists = -not [string]::IsNullOrWhiteSpace($secretId)
+          $shouldUpdate = $rotate -or -not $exists
+          "kv_name=$kvName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "should_update=$($shouldUpdate.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-            az keyvault secret set \
-              --vault-name "$KV_NAME" \
-              --name web-client-secret \
-              --value "$CLIENT_SECRET" \
+          if ($exists -and -not $rotate) {
+            Write-Host 'web-client-secret already present in Key Vault — skipping creation (use rotate_web_secret to force rotation).'
+          }
+
+      - name: Azure login to ExtID tenant for web credential
+        if: steps.web_secret_check.outputs.should_update == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.ENTRA_CLIENT_ID }}
+          tenant-id: ${{ vars.ENTRA_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Create or rotate web app credential in ExtID
+        if: steps.web_secret_check.outputs.should_update == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $secretPath = Join-Path $PWD '.web-client-secret'
+          $rotate = [System.Convert]::ToBoolean($env:ROTATE_WEB_SECRET)
+
+          if ($rotate) {
+            Write-Host "rotate_web_secret=true — forcing credential rotation for app $env:WEB_CLIENT_ID"
+          }
+          else {
+            Write-Host "First provision: generating client secret for app $env:WEB_CLIENT_ID"
+          }
+
+          $secretJson = az ad app credential reset `
+            --id $env:WEB_CLIENT_ID `
+            --append `
+            --display-name "cicd-managed-$($env:ENV_NAME)" `
+            --years 1 `
+            --output json | ConvertFrom-Json
+
+          $clientSecret = $secretJson.password
+          Write-Host "::add-mask::$clientSecret"
+          $clientSecret | Out-File -FilePath $secretPath -Encoding utf8 -NoNewline
+
+          if ($rotate) {
+            Write-Host "Pruning expired credentials from app registration $env:WEB_CLIENT_ID..."
+            try {
+              $creds = az ad app credential list --id $env:WEB_CLIENT_ID --output json | ConvertFrom-Json
+              $now = [DateTimeOffset]::UtcNow
+              $expired = @($creds | Where-Object {
+                $_.keyId -and $_.keyId -ne $secretJson.keyId -and [DateTimeOffset]::Parse($_.endDateTime) -lt $now
+              })
+              foreach ($cred in $expired) {
+                az ad app credential delete --id $env:WEB_CLIENT_ID --key-id $cred.keyId --output none
+                Write-Host "Deleted expired credential keyId=$($cred.keyId)"
+              }
+              Write-Host 'Expired-credential pruning complete.'
+            }
+            catch {
+              Write-Host 'Could not list or prune credentials — skipping pruning (non-fatal).'
+            }
+          }
+
+      - name: Azure login to workforce tenant for Key Vault write
+        if: steps.web_secret_check.outputs.should_update == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Store web-client-secret in Key Vault
+        if: steps.web_secret_check.outputs.should_update == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $secretPath = Join-Path $PWD '.web-client-secret'
+          try {
+            $clientSecret = Get-Content -Path $secretPath -Raw
+            Write-Host "::add-mask::$clientSecret"
+            az keyvault secret set `
+              --vault-name '${{ steps.web_secret_check.outputs.kv_name }}' `
+              --name web-client-secret `
+              --value $clientSecret `
               --output none
+            Write-Host "web-client-secret stored in Key Vault ${{ steps.web_secret_check.outputs.kv_name }}"
+          }
+          finally {
+            if (Test-Path $secretPath) {
+              Remove-Item $secretPath -Force
+            }
+          }
 
-            echo "✅ web-client-secret seeded into Key Vault $KV_NAME"
-          fi
-
-      # ------------------------------------------------------------------
-      # 7. Surface outputs as job summary
-      # ------------------------------------------------------------------
       - name: Summarise deployment outputs
         if: success()
+        shell: pwsh
         run: |
-          echo "## Deployment Outputs" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`json" >> "$GITHUB_STEP_SUMMARY"
-          cat deploy-output.json | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          outputs = data.get('properties', {}).get('outputs', {})
-          print(json.dumps({k: v.get('value') for k, v in outputs.items()}, indent=2))
-          " >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          $outputs = (Get-Content deploy-output.json -Raw | ConvertFrom-Json).properties.outputs
+          '## Deployment Outputs' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```json' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          $summary = [ordered]@{}
+          foreach ($property in $outputs.PSObject.Properties) {
+            $summary[$property.Name] = $property.Value.value
+          }
+          $summary | ConvertTo-Json -Depth 5 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
