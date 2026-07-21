@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "9462809217007910017"
+      "templateHash": "15221096573954923533"
     }
   },
   "parameters": {
@@ -26,9 +26,9 @@
     },
     "appServicePlanSku": {
       "type": "string",
-      "defaultValue": "P1v3",
+      "defaultValue": "S1",
       "metadata": {
-        "description": "App Service Plan SKU name (default P1v3 = Premium v3 1 core)"
+        "description": "App Service Plan SKU name (default S1 = Standard 1 core)"
       }
     },
     "tenantId": {

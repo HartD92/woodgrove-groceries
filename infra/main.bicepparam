@@ -13,7 +13,7 @@ using './main.bicep'
 // --- Environment ---
 param environmentName = 'dev'
 param location        = 'eastus2'
-param appServicePlanSku = 'P1v3'
+param appServicePlanSku = 'S1'
 
 // --- Entra External ID tenant (no secrets — from Azure portal > Entra > Overview) ---
 param tenantId = '<your-entra-external-id-tenant-id>'
