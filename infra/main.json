@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "986266373559408588"
+      "templateHash": "15788509830996284014"
     }
   },
   "parameters": {
@@ -1432,6 +1432,9 @@
               "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'graphApp'), '2025-04-01').outputs.principalId.value]",
               "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'authApp'), '2025-04-01').outputs.principalId.value]"
             ]
+          },
+          "deployerPrincipalId": {
+            "value": "[deployer().objectId]"
           }
         },
         "template": {
@@ -1441,7 +1444,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.45.15.27210",
-              "templateHash": "9662133176283771993"
+              "templateHash": "9193727835736191989"
             }
           },
           "parameters": {
@@ -1470,11 +1473,19 @@
               "metadata": {
                 "description": "Object IDs (principalId) of system-assigned managed identities to grant KV access"
               }
+            },
+            "deployerPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Object ID of the CI/CD deploying service principal to grant Key Vault Secrets Officer (read+write secrets). Empty string disables."
+              }
             }
           },
           "variables": {
             "kvSecretsUserRoleId": "4633458b-17de-408a-b874-0445c86b69e6",
-            "kvCertsUserRoleId": "db79e9a7-68ee-4b58-9aeb-b90e7c24fcba"
+            "kvCertsUserRoleId": "db79e9a7-68ee-4b58-9aeb-b90e7c24fcba",
+            "kvSecretsOfficerRoleId": "b86a8fe4-44ce-4948-aee5-eccb2c155cd7"
           },
           "resources": [
             {
@@ -1528,6 +1539,21 @@
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('kvCertsUserRoleId'))]",
                 "principalId": "[parameters('appPrincipalIds')[copyIndex()]]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('name'))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('deployerPrincipalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('name'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('name')), parameters('deployerPrincipalId'), variables('kvSecretsOfficerRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('kvSecretsOfficerRoleId'))]",
+                "principalId": "[parameters('deployerPrincipalId')]",
                 "principalType": "ServicePrincipal"
               },
               "dependsOn": [

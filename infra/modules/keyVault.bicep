@@ -10,11 +10,15 @@ param tags object = {}
 @description('Object IDs (principalId) of system-assigned managed identities to grant KV access')
 param appPrincipalIds array = []
 
+@description('Object ID of the CI/CD deploying service principal to grant Key Vault Secrets Officer (read+write secrets). Empty string disables.')
+param deployerPrincipalId string = ''
+
 // ------------------------------------------------------------------
 // Built-in Azure RBAC role definition IDs (same in every tenant/sub)
 // ------------------------------------------------------------------
 var kvSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
 var kvCertsUserRoleId   = 'db79e9a7-68ee-4b58-9aeb-b90e7c24fcba' // Key Vault Certificate User
+var kvSecretsOfficerRoleId = 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7' // Key Vault Secrets Officer
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: name
@@ -61,6 +65,16 @@ resource certsUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01
     }
   }
 ]
+
+resource deployerSecretsOfficer 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId)) {
+  name: guid(keyVault.id, deployerPrincipalId, kvSecretsOfficerRoleId)
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsOfficerRoleId)
+    principalId: deployerPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
 
 output id string = keyVault.id
 output name string = keyVault.name

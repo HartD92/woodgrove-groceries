@@ -316,6 +316,7 @@ module keyVault 'modules/keyVault.bicep' = {
       graphApp.outputs.principalId
       authApp.outputs.principalId
     ]
+    deployerPrincipalId: deployer().objectId
   }
 }
 
