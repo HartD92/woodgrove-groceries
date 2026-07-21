@@ -4,7 +4,7 @@
 //
 // azd-friendly deployment:
 //   az deployment sub create `
-//     --location eastus2 `
+//     --location westus2 `
 //     --template-file infra/main.bicep `
 //     --parameters infra/main.bicepparam
 //
@@ -23,7 +23,7 @@ targetScope = 'subscription'
 param environmentName string
 
 @description('Azure region for all resources')
-param location string = 'eastus2'
+param location string = 'westus2'
 
 @description('App Service Plan SKU name (default S1 = Standard 1 core)')
 param appServicePlanSku string = 'S1'
