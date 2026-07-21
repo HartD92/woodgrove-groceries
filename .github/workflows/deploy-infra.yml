@@ -492,7 +492,7 @@ jobs:
 
     env:
       ENV_NAME: ${{ inputs.environment || 'dev' }}
-      LOCATION: eastus2
+      LOCATION: westus2
       ROTATE_WEB_SECRET: ${{ inputs.rotate_web_secret || false }}
       WEB_CLIENT_ID: ${{ needs.entra-provision.outputs.web_client_id }}
       API_CLIENT_ID: ${{ needs.entra-provision.outputs.api_client_id }}
