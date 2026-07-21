@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/api/">
+    <Project Path="src/api/woodgrove-groceries-api.csproj" />
+  </Folder>
+  <Folder Name="/src/auth-api/">
+    <Project Path="src/auth-api/woodgroveapi.csproj" />
+  </Folder>
+  <Folder Name="/src/graph-middleware/">
+    <Project Path="src/graph-middleware/woodgrove-groceries-graph-middleware.csproj" />
+  </Folder>
+  <Folder Name="/src/storefront/">
+    <Project Path="src/storefront/woodgrovedemo.csproj" />
+  </Folder>
+</Solution>
