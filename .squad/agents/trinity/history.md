@@ -11,4 +11,4 @@
 📌 Team update (2026-07-21T07:45:38Z): Executed security audit fixes (removed bearer-token logging from EchoController, untracked real Entra config from graph-middleware, gated Temporary controllers via DevelopmentOnlyAttribute, standardized Graph scope to .default). 2 commits on squad/monorepo-consolidation. Build: 0 errors, 47 pre-existing C# warnings (backend only, none new).
 
 📌 Team update (2026-07-21T11:55:23-07:00): ExtID CI/CD now uses a two-identity/two-job split. Trinity root-caused AADSTS70021 and Graph Bicep tenant targeting; Dozer implemented PR #3 at commit c5372ff with workforce ARM deployment plus ExtID Entra provisioning. — decided by David/Coordinator
-
+📌 Team update (2026-07-21T16:52:42-07:00): Deploy pipeline auth/RBAC lesson: the CI deploy service principal needs Key Vault Secrets Officer on RBAC-enabled Key Vaults, assigned with Bicep `deployer().objectId`, so workflow secret read/write steps can seed `web-client-secret`.

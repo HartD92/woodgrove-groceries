@@ -335,3 +335,42 @@ All URLs already at exact semver versions (no pinning needed).
 
 **Refs:** Dozer inbox decision dozer-powershell-guide.md; PR #3.
 
+---
+
+### 2026-07-21T16:52:42-07:00: Deploy workflow Key Vault check resets LASTEXITCODE
+
+**By:** Dozer
+
+**What:** The deploy-infra workflow resets `$global:LASTEXITCODE = 0` after the expected first-run `az keyvault secret show` SecretNotFound path so GitHub Actions pwsh does not fail the step from the last native command exit code.
+
+**Why:** The workflow logic correctly handled a missing `web-client-secret`, but the runner can exit with `$LASTEXITCODE` at step end. Resetting it makes the expected not-found path explicit and keeps first deployment green.
+
+---
+
+### 2026-07-21T16:52:42-07:00: Key Vault grants deployer Secrets Officer via deployer().objectId
+
+**By:** Dozer
+
+**What:** The Key Vault module grants the ARM deployment principal Key Vault Secrets Officer using Bicep `deployer().objectId`, and the workflow secret steps tolerate first-run not-found plus transient RBAC propagation.
+
+**Why:** RBAC-enabled Key Vaults need the CI deployment service principal to read and write deployment-managed secrets. Binding to the actual deployer avoids hard-coding the service principal object ID while allowing `az keyvault secret show` and `set` to succeed.
+
+---
+
+### 2026-07-21T16:52:42-07:00: Correct Key Vault built-in role definition GUIDs
+
+**By:** Dozer
+
+**What:** Corrected the Key Vault Secrets User role definition ID to `4633458b-17de-408a-b874-0445c86b69e6` and Key Vault Certificate User to `db79e9a7-68ee-4b58-9aeb-b90e7c24fcba`.
+
+**Why:** Typoed built-in role GUIDs caused Azure deployments to fail with `RoleDefinitionDoesNotExist` after the region and SKU quota blockers were cleared.
+
+---
+
+### 2026-07-21T16:52:42-07:00: SecurityControl Ignore tag exempts public endpoint policy
+
+**By:** Dozer
+
+**What:** Added `SecurityControl: Ignore` to the shared `allTags` object in `infra/main.bicep` so all deployed resources receive the policy exemption tag.
+
+**Why:** This subscription policy disables public network access unless the resource has `SecurityControl=Ignore`. Central tagging keeps Key Vault reachable from the GitHub runner for data-plane secret writes and preserves intended public endpoints.
