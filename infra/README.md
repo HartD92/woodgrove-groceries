@@ -1,7 +1,7 @@
 # Woodgrove Groceries — Azure Infrastructure
 
 Bicep-based IaC for the full Woodgrove Groceries environment.  
-Starting from this revision, the same templates also provision the **Entra External ID (CIAM) app registrations** via the Microsoft Graph Bicep extension.
+Azure resources deploy from the workforce subscription tenant. Entra External ID (CIAM) app registrations are provisioned separately in the ExtID tenant by the GitHub Actions workflow.
 
 ---
 
@@ -39,7 +39,7 @@ infra/
 | Azure Communication Services | `acs-woodgrove-<env>-<suffix>` | Linked to Azure-managed email domain |
 | ACS Email Service | `email-woodgrove-<env>-<suffix>` | Azure-managed `@azurecomm.net` domain (dev/test) |
 
-### Entra Resources (Microsoft Graph Bicep extension)
+### Entra Resources (External ID tenant, provisioned by CI/CD CLI)
 
 | Resource | `uniqueName` | Notes |
 |---|---|---|
@@ -55,14 +55,14 @@ Secrets are Key Vault references (`@Microsoft.KeyVault(SecretUri=...)`); non-sec
 
 ## `provisionEntraApps` Toggle
 
-The `provisionEntraApps` parameter (default **`true`**) controls whether the Entra module runs:
+The `provisionEntraApps` parameter (default **`false`**) controls whether the deprecated Graph Bicep module runs:
 
 | Value | Behaviour |
 |---|---|
-| `true` | Bicep creates/updates the four app registrations; app settings use the module outputs |
-| `false` | Entra module is skipped; app settings use the `*ClientId` input params directly |
+| `false` | Supported path. Entra module is skipped; app settings use the `*ClientId` input params supplied by the ExtID provisioning job. |
+| `true` | Backward-compatibility only. Bicep creates/updates the four app registrations in the deployment principal's tenant. Do **not** use this when the Azure subscription tenant and ExtID tenant are different. |
 
-Use `false` for environments where app registrations were created before this IaC update, or where the deploy identity lacks `Application.ReadWrite.All`.
+For Woodgrove, keep this **false**. Subscription-scoped deployments authenticate to the workforce tenant, and the Microsoft Graph Bicep extension cannot target the separate ExtID tenant.
 
 ---
 
@@ -81,135 +81,161 @@ az account set --subscription "<subscription-id>"
 
 ## ⚠️ Bootstrap (One-Time Manual Step)
 
-> **Read this before setting up CI/CD.**  
-> The GitHub Actions deploy identity cannot provision itself.  The deployer app, its federated identity credential, and the `Application.ReadWrite.All` grant must be created **once** by a Global Administrator using the Azure CLI.
+> **Read this before setting up CI/CD.**  Woodgrove uses two Entra tenants:
+>
+> - **Workforce tenant:** owns the Azure subscription. Identity A deploys ARM/Bicep resources here.
+> - **External ID / CIAM tenant:** owns the customer-facing app registrations. Identity B provisions those Entra objects here.
+>
+> The workforce↔ExtID billing link is **not** an authentication trust. A GitHub OIDC federated identity credential (FIC) is only valid in the tenant where that app registration lives.
 
-### 1 — Create the deployer app registration
+### Tenant / identity map
+
+| Purpose | Tenant | GitHub variables | Permissions |
+|---|---|---|---|
+| Identity A — Azure resource deployment | Workforce tenant that owns the subscription | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | Azure RBAC: Contributor + User Access Administrator on the subscription |
+| Identity B — CIAM app registration provisioning | Entra External ID tenant | `ENTRA_CLIENT_ID`, `ENTRA_TENANT_ID` | Microsoft Graph app roles: `Application.ReadWrite.All`, `AppRoleAssignment.ReadWrite.All`, `DelegatedPermissionGrant.ReadWrite.All` |
+
+### Registering Identity A in the workforce tenant
+
+Use the existing workforce deploy identity if it already exists. If creating it from scratch, sign in to the **workforce tenant** and assign Azure RBAC on the subscription:
 
 ```powershell
-# Adjust display name / repo slug as needed
-$AppName = "woodgrove-groceries-cicd-deployer"
+$AppName = "woodgrove-groceries-arm-deployer"
 $RepoSlug = "HartD92/woodgrove-groceries"
-$TenantId = "<your-entra-external-id-tenant-id>"
+$WorkforceTenantId = "<your-workforce-tenant-id>"
 $SubscriptionId = "<your-azure-subscription-id>"
 
-# Create the application
-$AppId = az ad app create `
+az login --tenant $WorkforceTenantId
+az account set --subscription $SubscriptionId
+
+$AzureAppId = az ad app create `
   --display-name $AppName `
   --query appId -o tsv
 
-Write-Host "Deployer Application (client) ID: $AppId"
-
-# Create the service principal
-$SpObjectId = az ad sp create `
-  --id $AppId `
+$AzureSpObjectId = az ad sp create `
+  --id $AzureAppId `
   --query id -o tsv
 
-Write-Host "Deployer SP Object ID: $SpObjectId"
-```
-
-### 2 — Add federated identity credentials (FICs)
-
-```powershell
-# FIC for pushes / merge to main
-$ficJson = @'
-{
-  "name": "gha-main",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "SUBJECT_PLACEHOLDER",
-  "audiences": ["api://AzureADTokenExchange"]
+$fic = [ordered]@{
+  name = 'gha-main'
+  issuer = 'https://token.actions.githubusercontent.com'
+  subject = "repo:$($RepoSlug):ref:refs/heads/main"
+  audiences = @('api://AzureADTokenExchange')
 }
-'@ -replace 'SUBJECT_PLACEHOLDER', "repo:$($RepoSlug):ref:refs/heads/main"
-$ficJson | Out-File -FilePath fic-main.json -Encoding utf8
-az ad app federated-credential create --id $AppId --parameters '@fic-main.json'
+$fic | ConvertTo-Json -Depth 5 | Out-File -FilePath fic-main.json -Encoding utf8
+az ad app federated-credential create --id $AzureAppId --parameters '@fic-main.json'
 Remove-Item fic-main.json
 
-# FIC for the GitHub Environment "azure-infra" (workflow_dispatch + approval)
-$ficJson = @'
-{
-  "name": "gha-env-azure-infra",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "SUBJECT_PLACEHOLDER",
-  "audiences": ["api://AzureADTokenExchange"]
+$fic = [ordered]@{
+  name = 'gha-env-azure-infra'
+  issuer = 'https://token.actions.githubusercontent.com'
+  subject = "repo:$($RepoSlug):environment:azure-infra"
+  audiences = @('api://AzureADTokenExchange')
 }
-'@ -replace 'SUBJECT_PLACEHOLDER', "repo:$($RepoSlug):environment:azure-infra"
-$ficJson | Out-File -FilePath fic-env.json -Encoding utf8
-az ad app federated-credential create --id $AppId --parameters '@fic-env.json'
+$fic | ConvertTo-Json -Depth 5 | Out-File -FilePath fic-env.json -Encoding utf8
+az ad app federated-credential create --id $AzureAppId --parameters '@fic-env.json'
 Remove-Item fic-env.json
 
-# Optional: FIC for pull requests (read-only what-if)
-$ficJson = @'
-{
-  "name": "gha-pr",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "SUBJECT_PLACEHOLDER",
-  "audiences": ["api://AzureADTokenExchange"]
-}
-'@ -replace 'SUBJECT_PLACEHOLDER', "repo:$($RepoSlug):pull_request"
-$ficJson | Out-File -FilePath fic-pr.json -Encoding utf8
-az ad app federated-credential create --id $AppId --parameters '@fic-pr.json'
-Remove-Item fic-pr.json
-```
-
-### 3 — Grant Azure RBAC
-
-```powershell
-# Contributor on the subscription (needed to create resource groups + resources)
 az role assignment create `
-  --assignee-object-id $SpObjectId `
+  --assignee-object-id $AzureSpObjectId `
   --assignee-principal-type ServicePrincipal `
   --role Contributor `
   --scope "/subscriptions/$SubscriptionId"
 
-# OPTIONAL but required for Key Vault RBAC assignments:
 az role assignment create `
-  --assignee-object-id $SpObjectId `
+  --assignee-object-id $AzureSpObjectId `
   --assignee-principal-type ServicePrincipal `
   --role "User Access Administrator" `
   --scope "/subscriptions/$SubscriptionId"
 ```
 
-### 4 — Grant MS Graph permissions + admin consent
-
-```powershell
-# MS Graph service principal object ID (same in every tenant)
-$MsGraphSp = az ad sp show --id "00000003-0000-0000-c000-000000000000" --query id -o tsv
-
-# Application.ReadWrite.All  (app role ID: 1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9)
-az ad app permission add `
-  --id $AppId `
-  --api "00000003-0000-0000-c000-000000000000" `
-  --api-permissions "1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9=Role"
-
-# AppRoleAssignment.ReadWrite.All  (needed to grant consent to other apps)
-# App role ID: 06b708a9-e830-4db3-a914-8e69da51d44f
-az ad app permission add `
-  --id $AppId `
-  --api "00000003-0000-0000-c000-000000000000" `
-  --api-permissions "06b708a9-e830-4db3-a914-8e69da51d44f=Role"
-
-# Admin consent (requires Global Administrator or Privileged Role Administrator)
-az ad app permission admin-consent --id $AppId
-```
-
-> **VERIFY:** The app role IDs above are the well-known stable GUIDs documented at  
-> https://learn.microsoft.com/en-us/graph/permissions-reference  
-> Confirm against current docs before running.
-
-### 5 — Set GitHub Actions variables
-
-In the GitHub repository → **Settings → Secrets and variables → Actions → Variables**:
+Set GitHub Actions variables:
 
 | Variable | Value |
 |---|---|
-| `AZURE_CLIENT_ID` | `$APP_ID` from step 1 |
-| `AZURE_TENANT_ID` | Your Entra External ID tenant ID |
-| `AZURE_SUBSCRIPTION_ID` | Your Azure subscription ID |
+| `AZURE_CLIENT_ID` | `$AzureAppId` |
+| `AZURE_TENANT_ID` | `$WorkforceTenantId` |
+| `AZURE_SUBSCRIPTION_ID` | `$SubscriptionId` |
 
-> These are **variables** (not secrets) because they're non-sensitive identifiers.  
-> The OIDC flow never requires a client secret stored in GitHub.
+### Registering Identity B in the ExtID tenant
 
-### 6 — Create GitHub Environment
+Sign in to the **External ID / CIAM tenant**. This identity does not need Azure subscription RBAC; it only needs Microsoft Graph application permissions in the ExtID tenant.
+
+```powershell
+$AppName = "woodgrove-groceries-extid-entra-provisioner"
+$RepoSlug = "HartD92/woodgrove-groceries"
+$ExtIdTenantId = "<your-entra-external-id-tenant-id>"
+
+az login --tenant $ExtIdTenantId --allow-no-subscriptions
+
+$EntrAppId = az ad app create `
+  --display-name $AppName `
+  --query appId -o tsv
+
+$EntrSpObjectId = az ad sp create `
+  --id $EntrAppId `
+  --query id -o tsv
+
+# FIC for pushes / merge to main
+$fic = [ordered]@{
+  name = 'gha-main'
+  issuer = 'https://token.actions.githubusercontent.com'
+  subject = "repo:$($RepoSlug):ref:refs/heads/main"
+  audiences = @('api://AzureADTokenExchange')
+}
+$fic | ConvertTo-Json -Depth 5 | Out-File -FilePath fic-main.json -Encoding utf8
+az ad app federated-credential create --id $EntrAppId --parameters '@fic-main.json'
+Remove-Item fic-main.json
+
+# FIC for the GitHub Environment "azure-infra" (workflow_dispatch + approval)
+$fic = [ordered]@{
+  name = 'gha-env-azure-infra'
+  issuer = 'https://token.actions.githubusercontent.com'
+  subject = "repo:$($RepoSlug):environment:azure-infra"
+  audiences = @('api://AzureADTokenExchange')
+}
+$fic | ConvertTo-Json -Depth 5 | Out-File -FilePath fic-env.json -Encoding utf8
+az ad app federated-credential create --id $EntrAppId --parameters '@fic-env.json'
+Remove-Item fic-env.json
+```
+
+Grant Microsoft Graph permissions and admin consent in the **ExtID tenant**:
+
+```powershell
+$MicrosoftGraphAppId = "00000003-0000-0000-c000-000000000000"
+
+# VERIFY: Confirm these Graph app role IDs against
+# https://learn.microsoft.com/en-us/graph/permissions-reference before running.
+$ApplicationReadWriteAll = "1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9"          # Application.ReadWrite.All
+$AppRoleAssignmentReadWriteAll = "06b708a9-e830-4db3-a914-8e69da51d44f"    # AppRoleAssignment.ReadWrite.All
+$DelegatedPermissionGrantReadWriteAll = "8e8e4742-1d95-4f68-9d56-6ee75648c72a" # VERIFY: DelegatedPermissionGrant.ReadWrite.All
+
+az ad app permission add `
+  --id $EntrAppId `
+  --api $MicrosoftGraphAppId `
+  --api-permissions "$($ApplicationReadWriteAll)=Role"
+
+az ad app permission add `
+  --id $EntrAppId `
+  --api $MicrosoftGraphAppId `
+  --api-permissions "$($AppRoleAssignmentReadWriteAll)=Role"
+
+az ad app permission add `
+  --id $EntrAppId `
+  --api $MicrosoftGraphAppId `
+  --api-permissions "$($DelegatedPermissionGrantReadWriteAll)=Role"
+
+az ad app permission admin-consent --id $EntrAppId
+```
+
+Set GitHub Actions variables:
+
+| Variable | Value |
+|---|---|
+| `ENTRA_CLIENT_ID` | `$EntrAppId` |
+| `ENTRA_TENANT_ID` | `$ExtIdTenantId` |
+
+### GitHub Environment
 
 In GitHub repository → **Settings → Environments → New environment**:
 - Name: `azure-infra`
@@ -234,6 +260,9 @@ az account set --subscription "<subscription-id>"
 # Validate (lint + build)
 az bicep lint --file infra/main.bicep
 az bicep build --file infra/main.bicep
+
+# Fill webClientId/apiClientId/graphClientId/authClientId in infra/main.bicepparam,
+# or override them on the command line with the values from the ExtID provisioning job.
 
 # What-if (plan)
 az deployment sub what-if `
@@ -275,22 +304,30 @@ $AcsConn = az communication list-key `
 az keyvault secret set --vault-name $KvName `
   --name acs-connection-string --value $AcsConn
 
-# 3 — Web app client secret (idempotent — automated by GitHub Actions when provisionEntraApps=true)
+# 3 — Web app client secret (idempotent — automated by GitHub Actions)
 #
 # The deploy workflow is now idempotent for this secret:
 #   • If web-client-secret already exists in Key Vault → SKIP (no credential is minted or rotated)
-#   • If absent (first provision) + provisionEntraApps=true → CREATE a 1-year credential via addPassword
+#   • If absent (first provision) → CREATE a 1-year credential in ExtID via addPassword
 #   • rotate_web_secret=true dispatch input → FORCE RESET + KV update + prune expired app-reg creds
 #
-# For local/manual first-provision deploys (run only if the secret is absent in Key Vault):
+# For local/manual first-provision deploys, run only if the secret is absent in Key Vault.
+# First, while signed into the workforce tenant, read the client ID from deployment outputs:
 $WebClientId = az deployment sub show --name woodgrove-deploy-dev `
   --query "properties.outputs.resolvedWebClientId.value" -o tsv
+
+# Then sign into the ExtID tenant to create the CIAM app credential:
+az login --tenant "<your-entra-external-id-tenant-id>" --allow-no-subscriptions
 $SecretJson = az ad app credential reset `
   --id $WebClientId `
   --append `
   --display-name "cicd-managed-dev" `
   --years 1 `
   -o json | ConvertFrom-Json
+
+# Finally, sign back into the workforce tenant to store the secret in Key Vault:
+az login --tenant "<your-workforce-tenant-id>"
+az account set --subscription "<your-azure-subscription-id>"
 az keyvault secret set --vault-name $KvName `
   --name web-client-secret --value $SecretJson.password
 # NOTE: --append preserves existing credentials; the secret value is only
@@ -415,7 +452,7 @@ After the cert syncs to App Service, **manually add its thumbprint to the graph-
 | File | Scope | Description |
 |---|---|---|
 | `main.bicep` | `subscription` | Orchestrator: creates RG, wires modules |
-| `modules/entraApps.bicep` | Entra tenant (Graph) | 4 app registrations + service principals |
+| `modules/entraApps.bicep` | Entra tenant (Graph) | Deprecated deployment path; retained as the CIAM app-registration spec mirrored by the workflow CLI provisioning job |
 | `modules/appServicePlan.bicep` | resource group | Windows App Service Plan |
 | `modules/webApp.bicep` | resource group | Reusable Windows web app (system identity, always-on, HTTPS, cert loading) |
 | `modules/keyVault.bicep` | resource group | RBAC-enabled Key Vault; role assignments for each app's managed identity |

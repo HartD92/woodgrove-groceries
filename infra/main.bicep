@@ -3,9 +3,9 @@
 // Scope: subscription  (creates the resource group, then deploys all modules)
 //
 // azd-friendly deployment:
-//   az deployment sub create \
-//     --location eastus2 \
-//     --template-file infra/main.bicep \
+//   az deployment sub create `
+//     --location eastus2 `
+//     --template-file infra/main.bicep `
 //     --parameters infra/main.bicepparam
 //
 // Resource Group is created by this template; no manual az group create needed.
@@ -66,14 +66,16 @@ param tags object = {}
 // --- Entra provisioning toggle ---
 
 @description('''
-When true (default), Bicep provisions the four Entra app registrations via the
-Microsoft Graph extension and uses their output appIds for app settings.
+When true, Bicep provisions the four Entra app registrations via the Microsoft
+Graph extension and uses their output appIds for app settings. This mode is
+retained only for backward compatibility; sub-scoped deployments authenticate to
+the subscription tenant, so the Graph extension cannot target a separate ExtID
+tenant.
 
-When false, the *ClientId params below are used directly — preserving backward
-compatibility for environments where app registrations already exist and should
-not be modified by this deployment.
+When false (default), the *ClientId params below are used directly. CI/CD uses
+this mode after the ExtID app registrations are provisioned by Azure CLI.
 ''')
-param provisionEntraApps bool = true
+param provisionEntraApps bool = false
 
 // ============================================================
 // DERIVED NAMES  —  {type}-woodgrove-{component}-{env}
@@ -110,10 +112,10 @@ var allTags = union(tags, {
 })
 
 // ============================================================
-// ENTRA APP REGISTRATIONS  (Microsoft Graph extension)
-// Deployed at the Entra tenant scope — no resource group needed.
-// When provisionEntraApps=false the module is skipped and the
-// *ClientId input params are used directly (backward-compat mode).
+// ENTRA APP REGISTRATIONS  (DEPRECATED Microsoft Graph extension path)
+// Retained for backward compatibility only. In the supported two-tenant CI/CD
+// path, the ExtID app registrations are provisioned before this deployment and
+// provisionEntraApps=false passes their client IDs in as parameters.
 // ============================================================
 
 module entraApps 'modules/entraApps.bicep' = if (provisionEntraApps) {

@@ -1,6 +1,12 @@
 // =============================================================================
 // Woodgrove Groceries — Entra App Registrations + Service Principals
 //
+// DEPRECATED FOR DEPLOYMENT. Retained as the authoritative specification for
+// the four CIAM app registrations that the GitHub Actions CLI provisioning job
+// must create. The Microsoft Graph Bicep extension targets the deployment
+// principal's tenant; subscription deployments authenticate to the workforce
+// tenant, so this module cannot provision into a separate ExtID/CIAM tenant.
+//
 // Uses the Microsoft Graph Bicep extension (v1.0) to provision all four
 // Entra External ID app registrations and their service principals.
 //
