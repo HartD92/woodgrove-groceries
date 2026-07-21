@@ -25,8 +25,8 @@ param environmentName string
 @description('Azure region for all resources')
 param location string = 'eastus2'
 
-@description('App Service Plan SKU name (default P1v3 = Premium v3 1 core)')
-param appServicePlanSku string = 'P1v3'
+@description('App Service Plan SKU name (default S1 = Standard 1 core)')
+param appServicePlanSku string = 'S1'
 
 // --- Entra External ID (non-secret configuration) ---
 
