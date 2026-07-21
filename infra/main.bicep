@@ -63,6 +63,18 @@ param acsDataLocation string = 'United States'
 @description('Additional tags applied to all resources')
 param tags object = {}
 
+// --- Entra provisioning toggle ---
+
+@description('''
+When true (default), Bicep provisions the four Entra app registrations via the
+Microsoft Graph extension and uses their output appIds for app settings.
+
+When false, the *ClientId params below are used directly — preserving backward
+compatibility for environments where app registrations already exist and should
+not be modified by this deployment.
+''')
+param provisionEntraApps bool = true
+
 // ============================================================
 // DERIVED NAMES  —  {type}-woodgrove-{component}-{env}
 // ============================================================
@@ -96,6 +108,38 @@ var allTags = union(tags, {
   project: 'woodgrove-groceries'
   managedBy: 'bicep'
 })
+
+// ============================================================
+// ENTRA APP REGISTRATIONS  (Microsoft Graph extension)
+// Deployed at the Entra tenant scope — no resource group needed.
+// When provisionEntraApps=false the module is skipped and the
+// *ClientId input params are used directly (backward-compat mode).
+// ============================================================
+
+module entraApps 'modules/entraApps.bicep' = if (provisionEntraApps) {
+  name: 'entraApps'
+  // The MS Graph extension resources have no ARM scope — they deploy to the
+  // Entra tenant via the Graph API.  We still provide `scope: rg` so the ARM
+  // deployment engine has a valid resource group context.  The Graph resources
+  // inside the module are unaffected by this ARM scope.
+  scope: rg
+  params: {
+    environmentName: environmentName
+    webDomain: webDomain
+    // Deterministic hostnames resolve before web apps are deployed — no circular dependency.
+    webAppHostName:  '${webAppName}.azurewebsites.net'
+    authAppHostName: '${authAppName}.azurewebsites.net'
+  }
+}
+
+// Resolved client IDs — use Entra module outputs when provisionEntraApps=true,
+// fall back to input parameters when false.
+// ?? '' guards the BCP318 null-check; the outer ternary ensures the fallback
+// is the input param whenever the module is not deployed.
+var resolvedWebClientId   = provisionEntraApps ? (entraApps.outputs.webClientId   ?? '') : webClientId
+var resolvedApiClientId   = provisionEntraApps ? (entraApps.outputs.apiClientId   ?? '') : apiClientId
+var resolvedGraphClientId = provisionEntraApps ? (entraApps.outputs.graphClientId ?? '') : graphClientId
+var resolvedAuthClientId  = provisionEntraApps ? (entraApps.outputs.authClientId  ?? '') : authClientId
 
 // ============================================================
 // KEY VAULT SECRET REFERENCES
@@ -170,7 +214,7 @@ module webApp 'modules/webApp.bicep' = {
     tags: allTags
     appSettings: [
       { name: 'AzureAd__TenantId',                            value: tenantId }
-      { name: 'AzureAd__ClientId',                            value: webClientId }
+      { name: 'AzureAd__ClientId',                            value: resolvedWebClientId }
       { name: 'AzureAd__ClientSecret',                        value: kvRefWebSecret }
       { name: 'AzureAd__Domain',                              value: webDomain }
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
@@ -198,7 +242,7 @@ module apiApp 'modules/webApp.bicep' = {
     tags: allTags
     appSettings: [
       { name: 'AzureAd__TenantId',                            value: tenantId }
-      { name: 'AzureAd__ClientId',                            value: apiClientId }
+      { name: 'AzureAd__ClientId',                            value: resolvedApiClientId }
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING',         value: kvRefAppInsights }
       { name: 'AzureCommunicationServices__ConnectionString',  value: kvRefAcsConn }
@@ -219,7 +263,7 @@ module graphApp 'modules/webApp.bicep' = {
     tags: allTags
     appSettings: [
       { name: 'AzureAd__TenantId',          value: tenantId }
-      { name: 'AzureAd__ClientId',          value: graphClientId }
+      { name: 'AzureAd__ClientId',          value: resolvedGraphClientId }
       { name: 'AzureAd__Authority',         value: entraAuthorityUrl }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: kvRefAppInsights }
     ]
@@ -243,7 +287,7 @@ module authApp 'modules/webApp.bicep' = {
     tags: allTags
     appSettings: [
       { name: 'AzureAd__TenantId',          value: tenantId }
-      { name: 'AzureAd__ClientId',          value: authClientId }
+      { name: 'AzureAd__ClientId',          value: resolvedAuthClientId }
       { name: 'AzureAd__Authority',         value: entraAuthorityUrl }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: kvRefAppInsights }
     ]
@@ -301,3 +345,9 @@ output keyVaultName       string = keyVault.outputs.name
 output keyVaultUri        string = keyVault.outputs.uri
 output appInsightsName    string = monitoring.outputs.appInsightsName
 output acsResourceName    string = acs.outputs.name
+
+// Client IDs — either from Entra module (provisionEntraApps=true) or input params
+output resolvedWebClientId   string = resolvedWebClientId
+output resolvedApiClientId   string = resolvedApiClientId
+output resolvedGraphClientId string = resolvedGraphClientId
+output resolvedAuthClientId  string = resolvedAuthClientId

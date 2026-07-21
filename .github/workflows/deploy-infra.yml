@@ -1,0 +1,143 @@
+# =============================================================================
+# Woodgrove Groceries — Infrastructure Deploy
+#
+# Uses OpenID Connect (OIDC) federated authentication — NO stored secrets.
+# The GitHub Actions runner exchanges its OIDC token for an Azure access token
+# via the pre-provisioned deployer app registration and its federated identity
+# credential (FIC).
+#
+# Required GitHub repository variables (Settings → Secrets and variables →
+# Actions → Variables):
+#   AZURE_CLIENT_ID       — Application (client) ID of the GitHub Actions deployer
+#                           app registration (created in the bootstrap step)
+#   AZURE_TENANT_ID       — Entra tenant ID (External ID / CIAM tenant)
+#   AZURE_SUBSCRIPTION_ID — Azure subscription ID
+#
+# Required GitHub Environment (optional but recommended for approval gate):
+#   Name:   azure-infra   (create under Settings → Environments)
+#   Set required reviewers for production safety.
+# =============================================================================
+
+name: Deploy Infrastructure
+
+on:
+  # Manual trigger — primary path; allows env selection
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (matches environmentName Bicep param)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      provisionEntraApps:
+        description: 'Provision Entra app registrations (true = create/update, false = use existing IDs)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+  # Auto-trigger on pushes to main that touch infra/**
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/**'
+      - '.github/workflows/deploy-infra.yml'
+
+# Minimal permissions: OIDC token write + source read
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Bicep deploy → Azure (${{ github.event.inputs.environment || 'dev' }})
+    runs-on: ubuntu-latest
+
+    # Gate through the GitHub Environment for approval (optional but recommended)
+    environment: azure-infra
+
+    env:
+      ENV_NAME: ${{ github.event.inputs.environment || 'dev' }}
+      PROVISION_ENTRA: ${{ github.event.inputs.provisionEntraApps || 'true' }}
+      LOCATION: eastus2
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1. Checkout
+      # ------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # 2. Azure Login via OIDC federated credential (no stored secret)
+      # ------------------------------------------------------------------
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # ------------------------------------------------------------------
+      # 3. Ensure Bicep CLI is up to date + MS Graph extension available
+      #    The extension is declared in infra/bicepconfig.json and is
+      #    auto-restored from MCR when `az bicep build` / deployment runs.
+      # ------------------------------------------------------------------
+      - name: Install / upgrade Bicep CLI
+        run: az bicep install
+
+      - name: Validate Bicep template (lint + build)
+        run: |
+          az bicep lint --file infra/main.bicep
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+        # build to stdout discards the JSON ARM output; we just want exit code
+
+      # ------------------------------------------------------------------
+      # 4. What-if (plan) — shows changes without applying them
+      # ------------------------------------------------------------------
+      - name: What-if (deployment preview)
+        run: |
+          az deployment sub what-if \
+            --name "woodgrove-whatif-${ENV_NAME}-${{ github.run_number }}" \
+            --location "$LOCATION" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+                         environmentName="$ENV_NAME" \
+                         provisionEntraApps="$PROVISION_ENTRA"
+
+      # ------------------------------------------------------------------
+      # 5. Deploy
+      # ------------------------------------------------------------------
+      - name: Deploy infrastructure
+        run: |
+          az deployment sub create \
+            --name "woodgrove-deploy-${ENV_NAME}-${{ github.run_number }}" \
+            --location "$LOCATION" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+                         environmentName="$ENV_NAME" \
+                         provisionEntraApps="$PROVISION_ENTRA" \
+            --output json | tee deploy-output.json
+
+      # ------------------------------------------------------------------
+      # 6. Surface outputs as job summary
+      # ------------------------------------------------------------------
+      - name: Summarise deployment outputs
+        if: success()
+        run: |
+          echo "## Deployment Outputs" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`json" >> "$GITHUB_STEP_SUMMARY"
+          cat deploy-output.json | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          outputs = data.get('properties', {}).get('outputs', {})
+          print(json.dumps({k: v.get('value') for k, v in outputs.items()}, indent=2))
+          " >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"

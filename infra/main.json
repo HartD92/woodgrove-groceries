@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.44.1.10279",
-      "templateHash": "15271710743204320910"
+      "version": "0.45.15.27210",
+      "templateHash": "2601831188561510842"
     }
   },
   "parameters": {
@@ -101,6 +101,13 @@
       "metadata": {
         "description": "Additional tags applied to all resources"
       }
+    },
+    "provisionEntraApps": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "When true (default), Bicep provisions the four Entra app registrations via the\nMicrosoft Graph extension and uses their output appIds for app settings.\n\nWhen false, the *ClientId params below are used directly — preserving backward\ncompatibility for environments where app registrations already exist and should\nnot be modified by this deployment.\n"
+      }
     }
   },
   "variables": {
@@ -132,6 +139,314 @@
       "tags": "[variables('allTags')]"
     },
     {
+      "condition": "[parameters('provisionEntraApps')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "entraApps",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "webDomain": {
+            "value": "[parameters('webDomain')]"
+          },
+          "webAppHostName": {
+            "value": "[format('{0}.azurewebsites.net', variables('webAppName'))]"
+          },
+          "authAppHostName": {
+            "value": "[format('{0}.azurewebsites.net', variables('authAppName'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "144008465917843918"
+            }
+          },
+          "parameters": {
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Short environment identifier — drives uniqueName suffix so dev/staging/prod get separate registrations"
+              }
+            },
+            "webDomain": {
+              "type": "string",
+              "defaultValue": "woodgrovedemo.com",
+              "metadata": {
+                "description": "Primary public domain for the web app (e.g. woodgrovedemo.com)"
+              }
+            },
+            "webAppHostName": {
+              "type": "string",
+              "metadata": {
+                "description": "Default hostname of the web App Service (used for redirect URIs)"
+              }
+            },
+            "authAppHostName": {
+              "type": "string",
+              "metadata": {
+                "description": "Default hostname of the auth-api App Service (custom auth extension callback host)"
+              }
+            }
+          },
+          "variables": {
+            "apiAccessAsUserScopeId": "[guid(parameters('environmentName'), 'woodgrove-api', 'access_as_user')]",
+            "msGraphAppId": "00000003-0000-0000-c000-000000000000",
+            "graphUserReadWriteAllId": "741f803b-c850-494e-b5df-cde7c675a1ca",
+            "graphGroupReadWriteAllId": "62a82d76-70ea-41e2-9197-370581804d09",
+            "graphDirectoryReadWriteAllId": "19dbc75e-c2e2-444c-a770-ec69d8559fc7"
+          },
+          "imports": {
+            "microsoftGraphV1": {
+              "provider": "MicrosoftGraph",
+              "version": "1.0.0"
+            }
+          },
+          "resources": {
+            "apiApplication": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/applications@v1.0",
+              "properties": {
+                "uniqueName": "[format('woodgrove-groceries-api-{0}', parameters('environmentName'))]",
+                "displayName": "[format('woodgrove-groceries-api ({0})', parameters('environmentName'))]",
+                "api": {
+                  "requestedAccessTokenVersion": 2,
+                  "oauth2PermissionScopes": [
+                    {
+                      "id": "[variables('apiAccessAsUserScopeId')]",
+                      "adminConsentDisplayName": "Access woodgrove-groceries-api as the signed-in user",
+                      "adminConsentDescription": "Allows the app to access woodgrove-groceries-api on behalf of the signed-in user.",
+                      "userConsentDisplayName": "Access woodgrove-groceries-api",
+                      "userConsentDescription": "Allows this app to access woodgrove-groceries-api on your behalf.",
+                      "value": "access_as_user",
+                      "type": "User",
+                      "isEnabled": true
+                    }
+                  ]
+                },
+                "identifierUris": [
+                  "[format('api://woodgrove-groceries-api-{0}', parameters('environmentName'))]"
+                ],
+                "signInAudience": "AzureADMyOrg"
+              }
+            },
+            "apiServicePrincipal": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/servicePrincipals@v1.0",
+              "properties": {
+                "appId": "[reference('apiApplication').appId]",
+                "tags": [
+                  "woodgrove-groceries",
+                  "[parameters('environmentName')]"
+                ]
+              },
+              "dependsOn": [
+                "apiApplication"
+              ]
+            },
+            "webApplication": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/applications@v1.0",
+              "properties": {
+                "uniqueName": "[format('woodgrove-groceries-web-{0}', parameters('environmentName'))]",
+                "displayName": "[format('woodgrove-groceries ({0})', parameters('environmentName'))]",
+                "signInAudience": "AzureADMyOrg",
+                "web": {
+                  "redirectUris": [
+                    "[format('https://{0}/signin-oidc', parameters('webAppHostName'))]",
+                    "[format('https://{0}/signin-oidc', parameters('webDomain'))]"
+                  ],
+                  "logoutUrl": "[format('https://{0}/signout-oidc', parameters('webAppHostName'))]",
+                  "implicitGrantSettings": {
+                    "enableIdTokenIssuance": true,
+                    "enableAccessTokenIssuance": false
+                  }
+                },
+                "passwordCredentials": [
+                  {
+                    "displayName": "[format('deploy-managed-{0}', parameters('environmentName'))]",
+                    "endDateTime": "2027-08-01T00:00:00Z"
+                  }
+                ],
+                "requiredResourceAccess": [
+                  {
+                    "resourceAppId": "[reference('apiApplication').appId]",
+                    "resourceAccess": [
+                      {
+                        "id": "[variables('apiAccessAsUserScopeId')]",
+                        "type": "Scope"
+                      }
+                    ]
+                  },
+                  {
+                    "resourceAppId": "[variables('msGraphAppId')]",
+                    "resourceAccess": [
+                      {
+                        "id": "37f7f235-527c-4136-accd-4a02d197296e",
+                        "type": "Scope"
+                      },
+                      {
+                        "id": "7427e0e9-2fba-42fe-b0c0-848c9e6a8182",
+                        "type": "Scope"
+                      },
+                      {
+                        "id": "14dad69e-099b-42c9-810b-d002981feec1",
+                        "type": "Scope"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "dependsOn": [
+                "apiApplication"
+              ]
+            },
+            "webServicePrincipal": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/servicePrincipals@v1.0",
+              "properties": {
+                "appId": "[reference('webApplication').appId]",
+                "tags": [
+                  "woodgrove-groceries",
+                  "[parameters('environmentName')]"
+                ]
+              },
+              "dependsOn": [
+                "webApplication"
+              ]
+            },
+            "graphApplication": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/applications@v1.0",
+              "properties": {
+                "uniqueName": "[format('woodgrove-graph-middleware-{0}', parameters('environmentName'))]",
+                "displayName": "[format('woodgrove-graph-middleware ({0})', parameters('environmentName'))]",
+                "signInAudience": "AzureADMyOrg",
+                "requiredResourceAccess": [
+                  {
+                    "resourceAppId": "[variables('msGraphAppId')]",
+                    "resourceAccess": [
+                      {
+                        "id": "[variables('graphUserReadWriteAllId')]",
+                        "type": "Role"
+                      },
+                      {
+                        "id": "[variables('graphGroupReadWriteAllId')]",
+                        "type": "Role"
+                      },
+                      {
+                        "id": "[variables('graphDirectoryReadWriteAllId')]",
+                        "type": "Role"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "graphServicePrincipal": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/servicePrincipals@v1.0",
+              "properties": {
+                "appId": "[reference('graphApplication').appId]",
+                "tags": [
+                  "woodgrove-groceries",
+                  "[parameters('environmentName')]"
+                ]
+              },
+              "dependsOn": [
+                "graphApplication"
+              ]
+            },
+            "authApplication": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/applications@v1.0",
+              "properties": {
+                "uniqueName": "[format('woodgrove-auth-api-{0}', parameters('environmentName'))]",
+                "displayName": "[format('woodgrove-auth-api ({0})', parameters('environmentName'))]",
+                "signInAudience": "AzureADMyOrg",
+                "appRoles": [
+                  {
+                    "id": "[guid(parameters('environmentName'), 'auth-api', 'CustomAuthenticationExtension.Receive.Payload')]",
+                    "displayName": "CustomAuthenticationExtension.Receive.Payload",
+                    "description": "Allows the custom authentication extension to receive payloads from Entra External ID",
+                    "value": "CustomAuthenticationExtension.Receive.Payload",
+                    "allowedMemberTypes": [
+                      "Application"
+                    ],
+                    "isEnabled": true
+                  }
+                ],
+                "web": {
+                  "redirectUris": [
+                    "[format('https://{0}/', parameters('authAppHostName'))]"
+                  ]
+                }
+              }
+            },
+            "authServicePrincipal": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/servicePrincipals@v1.0",
+              "properties": {
+                "appId": "[reference('authApplication').appId]",
+                "tags": [
+                  "woodgrove-groceries",
+                  "[parameters('environmentName')]"
+                ]
+              },
+              "dependsOn": [
+                "authApplication"
+              ]
+            }
+          },
+          "outputs": {
+            "webClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application (client) ID of the web / storefront app registration"
+              },
+              "value": "[reference('webApplication').appId]"
+            },
+            "apiClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application (client) ID of the API app registration"
+              },
+              "value": "[reference('apiApplication').appId]"
+            },
+            "graphClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application (client) ID of the graph-middleware app registration"
+              },
+              "value": "[reference('graphApplication').appId]"
+            },
+            "authClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application (client) ID of the auth-api app registration"
+              },
+              "value": "[reference('authApplication').appId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "monitoring",
@@ -161,8 +476,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "12200256550966595672"
+              "version": "0.45.15.27210",
+              "templateHash": "16539765317479213374"
             }
           },
           "parameters": {
@@ -292,8 +607,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "13816840149373871391"
+              "version": "0.45.15.27210",
+              "templateHash": "2841159868597642229"
             }
           },
           "parameters": {
@@ -393,7 +708,7 @@
               },
               {
                 "name": "AzureAd__ClientId",
-                "value": "[parameters('webClientId')]"
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.webClientId.value, ''), parameters('webClientId'))]"
               },
               {
                 "name": "AzureAd__ClientSecret",
@@ -444,8 +759,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "10181307771183739304"
+              "version": "0.45.15.27210",
+              "templateHash": "18283134702710421303"
             }
           },
           "parameters": {
@@ -559,6 +874,7 @@
         }
       },
       "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
         "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
       ]
@@ -600,7 +916,7 @@
               },
               {
                 "name": "AzureAd__ClientId",
-                "value": "[parameters('apiClientId')]"
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.apiClientId.value, ''), parameters('apiClientId'))]"
               },
               {
                 "name": "AzureAd__Authority",
@@ -623,8 +939,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "10181307771183739304"
+              "version": "0.45.15.27210",
+              "templateHash": "18283134702710421303"
             }
           },
           "parameters": {
@@ -738,6 +1054,7 @@
         }
       },
       "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
         "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
       ]
@@ -779,7 +1096,7 @@
               },
               {
                 "name": "AzureAd__ClientId",
-                "value": "[parameters('graphClientId')]"
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
               },
               {
                 "name": "AzureAd__Authority",
@@ -798,8 +1115,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "10181307771183739304"
+              "version": "0.45.15.27210",
+              "templateHash": "18283134702710421303"
             }
           },
           "parameters": {
@@ -913,6 +1230,7 @@
         }
       },
       "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
         "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
       ]
@@ -954,7 +1272,7 @@
               },
               {
                 "name": "AzureAd__ClientId",
-                "value": "[parameters('authClientId')]"
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.authClientId.value, ''), parameters('authClientId'))]"
               },
               {
                 "name": "AzureAd__Authority",
@@ -973,8 +1291,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "10181307771183739304"
+              "version": "0.45.15.27210",
+              "templateHash": "18283134702710421303"
             }
           },
           "parameters": {
@@ -1088,6 +1406,7 @@
         }
       },
       "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
         "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
       ]
@@ -1127,8 +1446,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "16051745117955404607"
+              "version": "0.45.15.27210",
+              "templateHash": "9021328927941913873"
             }
           },
           "parameters": {
@@ -1276,8 +1595,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.44.1.10279",
-              "templateHash": "12174021105821361280"
+              "version": "0.45.15.27210",
+              "templateHash": "13209425216900243481"
             }
           },
           "parameters": {
@@ -1413,6 +1732,22 @@
     "acsResourceName": {
       "type": "string",
       "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'communicationServices'), '2025-04-01').outputs.name.value]"
+    },
+    "resolvedWebClientId": {
+      "type": "string",
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.webClientId.value, ''), parameters('webClientId'))]"
+    },
+    "resolvedApiClientId": {
+      "type": "string",
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.apiClientId.value, ''), parameters('apiClientId'))]"
+    },
+    "resolvedGraphClientId": {
+      "type": "string",
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
+    },
+    "resolvedAuthClientId": {
+      "type": "string",
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.authClientId.value, ''), parameters('authClientId'))]"
     }
   }
 }

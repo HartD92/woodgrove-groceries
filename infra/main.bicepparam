@@ -18,8 +18,15 @@ param appServicePlanSku = 'P1v3'
 // --- Entra External ID tenant (no secrets — from Azure portal > Entra > Overview) ---
 param tenantId = '<your-entra-external-id-tenant-id>'
 
-// --- App registration Client IDs (non-secret — visible in Azure portal) ---
-// Register each app in Entra External ID before deploying; copy the Application (client) ID.
+// --- Entra provisioning ---
+// Set to true (default) to let Bicep create/update the four Entra app
+// registrations via the Microsoft Graph extension.
+// Set to false to use the *ClientId params below without touching Entra.
+param provisionEntraApps = true
+
+// --- App registration Client IDs (used only when provisionEntraApps = false) ---
+// When provisionEntraApps = true, these are IGNORED; the IDs come from the
+// Entra module outputs.  Fill these in only for "consume existing" deploys.
 param webClientId   = '<web-app-client-id>'          // woodgrove-groceries app reg
 param apiClientId   = '<api-app-client-id>'           // woodgrove-groceries-api app reg
 param graphClientId = '<graph-middleware-client-id>'  // graph-middleware app reg

@@ -1,15 +1,36 @@
 # Woodgrove Groceries — Azure Infrastructure
 
-Bicep-based IaC for the full Woodgrove Groceries environment.
+Bicep-based IaC for the full Woodgrove Groceries environment.  
+Starting from this revision, the same templates also provision the **Entra External ID (CIAM) app registrations** via the Microsoft Graph Bicep extension.
 
-## What Gets Deployed
+---
+
+## Architecture Overview
+
+```
+infra/
+  bicepconfig.json         ← MS Graph extension declaration
+  main.bicep               ← Subscription-scoped orchestrator
+  main.bicepparam          ← Parameter values (no secrets)
+  modules/
+    entraApps.bicep        ← NEW: Entra app registrations + service principals
+    appServicePlan.bicep
+    webApp.bicep
+    keyVault.bicep
+    monitoring.bicep
+    communicationServices.bicep
+.github/workflows/
+  deploy-infra.yml         ← NEW: OIDC-based GitHub Actions deploy workflow
+```
+
+### Azure Resources
 
 | Resource | Naming pattern | Notes |
 |---|---|---|
 | Resource Group | `rg-woodgrove-<env>` | Created by `main.bicep` (subscription scope) |
 | App Service Plan | `plan-woodgrove-main-<env>` | Windows, P1v3 by default |
-| Web app — woodgrove-groceries | `app-woodgrove-web-<env>-<suffix>` | `woodgrovedemo.com` |
-| Web app — woodgrove-groceries-api | `app-woodgrove-api-<env>-<suffix>` | `api.woodgrovedemo.com` |
+| Web app — storefront | `app-woodgrove-web-<env>-<suffix>` | `woodgrovedemo.com` |
+| Web app — API | `app-woodgrove-api-<env>-<suffix>` | `api.woodgrovedemo.com` |
 | Web app — graph-middleware | `app-woodgrove-graph-<env>-<suffix>` | `graph-middleware.woodgrovedemo.com` |
 | Web app — auth-api | `app-woodgrove-auth-<env>-<suffix>` | **Stable HTTPS endpoint required by Entra** |
 | Key Vault | `kv-wg-<env>-<suffix>` | RBAC-enabled; all four apps granted Secrets User + Certificate User |
@@ -18,67 +39,205 @@ Bicep-based IaC for the full Woodgrove Groceries environment.
 | Azure Communication Services | `acs-woodgrove-<env>-<suffix>` | Linked to Azure-managed email domain |
 | ACS Email Service | `email-woodgrove-<env>-<suffix>` | Azure-managed `@azurecomm.net` domain (dev/test) |
 
+### Entra Resources (Microsoft Graph Bicep extension)
+
+| Resource | `uniqueName` | Notes |
+|---|---|---|
+| Application + SP — storefront | `woodgrove-groceries-web-<env>` | Redirect URIs, ID tokens enabled, client secret |
+| Application + SP — API | `woodgrove-groceries-api-<env>` | Exposes `access_as_user` delegated scope |
+| Application + SP — graph-middleware | `woodgrove-graph-middleware-<env>` | MS Graph application permissions |
+| Application + SP — auth-api | `woodgrove-auth-api-<env>` | Hosts custom authentication extension |
+
 All four web apps use **system-assigned managed identity**; `WEBSITE_LOAD_CERTIFICATES=*` ensures client certs are available in the Windows cert store.  
 Secrets are Key Vault references (`@Microsoft.KeyVault(SecretUri=...)`); non-secret config comes from `main.bicepparam`.
+
+---
+
+## `provisionEntraApps` Toggle
+
+The `provisionEntraApps` parameter (default **`true`**) controls whether the Entra module runs:
+
+| Value | Behaviour |
+|---|---|
+| `true` | Bicep creates/updates the four app registrations; app settings use the module outputs |
+| `false` | Entra module is skipped; app settings use the `*ClientId` input params directly |
+
+Use `false` for environments where app registrations were created before this IaC update, or where the deploy identity lacks `Application.ReadWrite.All`.
 
 ---
 
 ## Prerequisites
 
 ```bash
-az --version          # ≥ 2.50.0
-az bicep version      # ≥ 0.24.0  (az bicep upgrade if older)
+az --version          # ≥ 2.60.0
+az bicep version      # ≥ 0.36.0  (az bicep upgrade if older)
 az login              # sign in with your corporate account
 az account set --subscription "<subscription-id>"
 ```
+
+> **MS Graph extension** is declared in `infra/bicepconfig.json` and is **auto-restored** by the Bicep CLI from MCR before compilation — no manual install step.
+
+---
+
+## ⚠️ Bootstrap (One-Time Manual Step)
+
+> **Read this before setting up CI/CD.**  
+> The GitHub Actions deploy identity cannot provision itself.  The deployer app, its federated identity credential, and the `Application.ReadWrite.All` grant must be created **once** by a Global Administrator using the Azure CLI.
+
+### 1 — Create the deployer app registration
+
+```bash
+# Adjust display name / repo slug as needed
+APP_NAME="woodgrove-groceries-cicd-deployer"
+REPO="HartD92/woodgrove-groceries"
+TENANT_ID="<your-entra-external-id-tenant-id>"
+SUBSCRIPTION_ID="<your-azure-subscription-id>"
+
+# Create the application
+APP_ID=$(az ad app create \
+  --display-name "$APP_NAME" \
+  --query appId -o tsv)
+
+echo "Deployer Application (client) ID: $APP_ID"
+
+# Create the service principal
+SP_OBJECT_ID=$(az ad sp create \
+  --id "$APP_ID" \
+  --query id -o tsv)
+
+echo "Deployer SP Object ID: $SP_OBJECT_ID"
+```
+
+### 2 — Add federated identity credentials (FICs)
+
+```bash
+# FIC for pushes / merge to main
+az ad app federated-credential create \
+  --id "$APP_ID" \
+  --parameters '{
+    "name": "gha-main",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subject": "repo:'"$REPO"':ref:refs/heads/main",
+    "audiences": ["api://AzureADTokenExchange"]
+  }'
+
+# FIC for the GitHub Environment "azure-infra" (workflow_dispatch + approval)
+az ad app federated-credential create \
+  --id "$APP_ID" \
+  --parameters '{
+    "name": "gha-env-azure-infra",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subject": "repo:'"$REPO"':environment:azure-infra",
+    "audiences": ["api://AzureADTokenExchange"]
+  }'
+
+# Optional: FIC for pull requests (read-only what-if)
+az ad app federated-credential create \
+  --id "$APP_ID" \
+  --parameters '{
+    "name": "gha-pr",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "subject": "repo:'"$REPO"':pull_request",
+    "audiences": ["api://AzureADTokenExchange"]
+  }'
+```
+
+### 3 — Grant Azure RBAC
+
+```bash
+# Contributor on the subscription (needed to create resource groups + resources)
+az role assignment create \
+  --assignee-object-id "$SP_OBJECT_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role Contributor \
+  --scope "/subscriptions/$SUBSCRIPTION_ID"
+
+# OPTIONAL but required for Key Vault RBAC assignments:
+az role assignment create \
+  --assignee-object-id "$SP_OBJECT_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role "User Access Administrator" \
+  --scope "/subscriptions/$SUBSCRIPTION_ID"
+```
+
+### 4 — Grant MS Graph permissions + admin consent
+
+```bash
+# MS Graph service principal object ID (same in every tenant)
+MSGRAPH_SP=$(az ad sp show --id "00000003-0000-0000-c000-000000000000" --query id -o tsv)
+
+# Application.ReadWrite.All  (app role ID: 1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9)
+az ad app permission add \
+  --id "$APP_ID" \
+  --api "00000003-0000-0000-c000-000000000000" \
+  --api-permissions "1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9=Role"
+
+# AppRoleAssignment.ReadWrite.All  (needed to grant consent to other apps)
+# App role ID: 06b708a9-e830-4db3-a914-8e69da51d44f
+az ad app permission add \
+  --id "$APP_ID" \
+  --api "00000003-0000-0000-c000-000000000000" \
+  --api-permissions "06b708a9-e830-4db3-a914-8e69da51d44f=Role"
+
+# Admin consent (requires Global Administrator or Privileged Role Administrator)
+az ad app permission admin-consent --id "$APP_ID"
+```
+
+> **VERIFY:** The app role IDs above are the well-known stable GUIDs documented at  
+> https://learn.microsoft.com/en-us/graph/permissions-reference  
+> Confirm against current docs before running.
+
+### 5 — Set GitHub Actions variables
+
+In the GitHub repository → **Settings → Secrets and variables → Actions → Variables**:
+
+| Variable | Value |
+|---|---|
+| `AZURE_CLIENT_ID` | `$APP_ID` from step 1 |
+| `AZURE_TENANT_ID` | Your Entra External ID tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | Your Azure subscription ID |
+
+> These are **variables** (not secrets) because they're non-sensitive identifiers.  
+> The OIDC flow never requires a client secret stored in GitHub.
+
+### 6 — Create GitHub Environment
+
+In GitHub repository → **Settings → Environments → New environment**:
+- Name: `azure-infra`
+- Add required reviewers for production protection (optional for dev)
 
 ---
 
 ## Deploy
 
-### 1 — Fill in `main.bicepparam`
+### Option A — GitHub Actions (recommended)
 
-Open `infra/main.bicepparam` and replace every `<placeholder>` with real values:
+1. Complete all bootstrap steps above.
+2. Push to `main` (auto-triggers on `infra/**` changes) or use  
+   **Actions → Deploy Infrastructure → Run workflow** for manual control.
 
-| Placeholder | Where to find it |
-|---|---|
-| `<your-entra-external-id-tenant-id>` | Azure portal → Entra External ID → Overview → Tenant ID |
-| `<web-app-client-id>` | Entra → App registrations → woodgrove-groceries → Overview |
-| `<api-app-client-id>` | Entra → App registrations → woodgrove-groceries-api → Overview |
-| `<graph-middleware-client-id>` | Entra → App registrations → graph-middleware → Overview |
-| `<auth-api-client-id>` | Entra → App registrations → auth-api → Overview |
-| `<tenant-subdomain>` | Your CIAM tenant subdomain (e.g. `woodgrovedemo`) |
-| `<cloudflare-zone-id>` | Cloudflare dashboard → your domain → Zone ID |
-
-**No secrets go in the param file.** Client secrets / connection strings are seeded to Key Vault in step 4.
-
-### 2 — Validate (what-if)
+### Option B — Local CLI
 
 ```bash
+az login
+az account set --subscription "<subscription-id>"
+
+# Validate (lint + build)
+az bicep lint --file infra/main.bicep
+az bicep build --file infra/main.bicep
+
+# What-if (plan)
 az deployment sub what-if \
   --location eastus2 \
   --template-file infra/main.bicep \
   --parameters infra/main.bicepparam
-```
 
-### 3 — Deploy
-
-```bash
+# Deploy
 az deployment sub create \
   --name woodgrove-deploy-dev \
   --location eastus2 \
   --template-file infra/main.bicep \
   --parameters infra/main.bicepparam
-```
-
-The deployment creates the resource group, then provisions all resources in dependency order (monitoring and App Service Plan first, web apps next, then Key Vault with RBAC assignments, then ACS).
-
-Capture the outputs — you will need them in the next steps:
-
-```bash
-az deployment sub show \
-  --name woodgrove-deploy-dev \
-  --query properties.outputs
 ```
 
 ---
@@ -107,7 +266,12 @@ ACS_CONN=$(az communication list-key \
 az keyvault secret set --vault-name $KV_NAME \
   --name acs-connection-string --value "$ACS_CONN"
 
-# 3 — Web app client secret (from Entra app registration → Certificates & secrets)
+# 3 — Web app client secret
+# After Bicep deploys the web app registration, go to:
+#   Entra portal → App registrations → woodgrove-groceries (dev) →
+#   Certificates & secrets → find the "deploy-managed-dev" credential.
+# The secret VALUE is shown only once at creation time in the portal.
+# Copy it here:
 az keyvault secret set --vault-name $KV_NAME \
   --name web-client-secret --value "<paste-client-secret>"
 
@@ -116,105 +280,106 @@ az keyvault secret set --vault-name $KV_NAME \
   --name cloudflare-api-secret --value "<paste-cloudflare-token>"
 ```
 
-### Upload Client Certificates to Key Vault
+---
+
+## Post-Deploy: Register the Custom Authentication Extension (Manual)
+
+`Microsoft.Graph/customAuthenticationExtensions` is **not available as a Bicep resource type** (v1.0 or beta, as of August 2025). Register it with `az rest` after deployment:
 
 ```bash
-# Upload each PFX certificate that the apps need to load from the Windows cert store.
-az keyvault certificate import \
-  --vault-name $KV_NAME \
-  --name <cert-name> \
-  --file /path/to/cert.pfx \
-  --password "<pfx-password>"
+AUTH_HOST=$(az deployment sub show --name woodgrove-deploy-dev \
+  --query "properties.outputs.authAppHostName.value" -o tsv)
+
+AUTH_CLIENT_ID=$(az deployment sub show --name woodgrove-deploy-dev \
+  --query "properties.outputs.resolvedAuthClientId.value" -o tsv)
+
+TENANT_ID="<your-entra-external-id-tenant-id>"
+
+# Create the custom authentication extension
+az rest \
+  --method POST \
+  --uri "https://graph.microsoft.com/v1.0/identity/customAuthenticationExtensions" \
+  --headers "Content-Type=application/json" \
+  --body '{
+    "@odata.type": "#microsoft.graph.onTokenIssuanceStartCustomExtension",
+    "displayName": "woodgrove-auth-api",
+    "description": "Woodgrove custom authentication extension",
+    "endpointConfiguration": {
+      "@odata.type": "#microsoft.graph.httpRequestEndpoint",
+      "targetUrl": "https://'"$AUTH_HOST"'/api/CustomAuthenticationExtension"
+    },
+    "authenticationConfiguration": {
+      "@odata.type": "#microsoft.graph.azureAdTokenAuthentication",
+      "resourceId": "'"$AUTH_CLIENT_ID"'"
+    }
+  }'
 ```
 
-After upload, App Service can sync the cert via the Key Vault Certificate User role already granted.  
-In the App Service blade: **TLS/SSL Settings → Private Key Certificates (.pfx) → Import from Key Vault**.  
-Once synced, the cert's thumbprint is loaded into the Windows cert store at runtime because `WEBSITE_LOAD_CERTIFICATES=*`.
+After creating the extension, wire it to your Entra External ID user flow in the portal:  
+**Entra External ID → User flows → [your flow] → Custom authentication extensions**.
 
 ---
 
 ## Post-Deploy: Configure Custom Domains
 
-Each web app needs a custom domain and a TLS certificate:
-
 ```bash
-# Example for the web app — repeat for api., graph-middleware., auth-api.
 APP_NAME="app-woodgrove-web-dev-<suffix>"
 RG="rg-woodgrove-dev"
 
-# 1 — Add custom domain (DNS CNAME/A must already point to the app)
 az webapp config hostname add \
-  --webapp-name $APP_NAME \
-  --resource-group $RG \
+  --webapp-name $APP_NAME --resource-group $RG \
   --hostname woodgrovedemo.com
 
-# 2 — Bind the uploaded cert to the custom domain
 az webapp config ssl bind \
-  --name $APP_NAME \
-  --resource-group $RG \
-  --certificate-thumbprint "<thumbprint>" \
-  --ssl-type SNI
+  --name $APP_NAME --resource-group $RG \
+  --certificate-thumbprint "<thumbprint>" --ssl-type SNI
 ```
 
 ---
 
-## Manual Entra External ID Steps (Bicep Cannot Do These)
+## Post-Deploy: Certificate Upload (graph-middleware)
 
-These steps require an Entra administrator and must be completed after deployment.
+The graph-middleware app uses certificate-based client authentication against Microsoft Graph.  
+Upload the PFX to Key Vault (cert sync to App Service is automatic via the Key Vault Certificate User role):
 
-### A — App Registrations (one per component)
+```bash
+az keyvault certificate import \
+  --vault-name $KV_NAME \
+  --name graph-middleware-cert \
+  --file /path/to/cert.pfx \
+  --password "<pfx-password>"
+```
 
-In **Azure portal → Entra External ID → App registrations**, create four registrations and record the client IDs into `main.bicepparam`:
-
-1. **woodgrove-groceries** (web)  
-   - Platform: Web  
-   - Redirect URIs: `https://woodgrovedemo.com/signin-oidc`  
-   - Client secret → seed as `web-client-secret` in Key Vault  
-   - API permissions: `openid`, `offline_access`, `profile`, your API scopes
-
-2. **woodgrove-groceries-api**  
-   - Platform: Web / API  
-   - Expose API: define scopes used by the web front-end
-
-3. **graph-middleware**  
-   - Platform: Web  
-   - API permissions: Microsoft Graph delegated/application scopes as required
-
-4. **auth-api** (custom authentication extension)  
-   - Platform: Web  
-   - Redirect URI: `https://<authAppHostName>.azurewebsites.net/`
-
-### B — Register the Custom Authentication Extension
-
-1. Go to **Entra External ID → Custom authentication extensions → Create**.
-2. Select event type: **TokenIssuanceStart** (or the appropriate event for your flow).
-3. Set the **Target URL** to:
-   ```
-   https://<authAppHostName>.azurewebsites.net/api/CustomAuthenticationExtension
-   ```
-   Replace `<authAppHostName>` with the value from the deployment outputs.  
-   > This is the stable public HTTPS endpoint — do NOT change the App Service default hostname unless you add a custom domain and keep it stable.
-4. Select or create an associated app registration (the **auth-api** registration from step A-4).
-5. Grant admin consent for the custom extension permissions.
-
-### C — Authentication Flows
-
-Wire up your Entra External ID user flows / custom policies to call the custom authentication extension registered in step B.
+After the cert syncs to App Service, **manually add its thumbprint to the graph-middleware app registration** in the Entra portal:  
+**App registrations → woodgrove-graph-middleware → Certificates & secrets → Certificates → Upload certificate**.
 
 ---
 
-## Environment Teardown
+## Permissions Reference
 
-```bash
-# Removes the entire resource group (irreversible)
-az group delete --name rg-woodgrove-dev --yes --no-wait
-```
+### What `Application.ReadWrite.All` covers
 
-Soft-deleted Key Vaults must be purged to free the globally unique name:
+| Operation | Covered? |
+|---|---|
+| Create / update app registrations | ✅ |
+| Create / update service principals | ✅ |
+| Add federated identity credentials | ✅ |
+| Set app roles / scopes on registrations | ✅ |
+| **Grant admin consent** for app roles | ❌ — needs `AppRoleAssignment.ReadWrite.All` |
+| **Create delegated permission grants** | ❌ — needs `DelegatedPermissionGrant.ReadWrite.All` |
+| **Upload certificates** to registrations | ❌ — out-of-band via portal or Graph API call |
 
-```bash
-az keyvault purge --name kv-wg-dev-<suffix> --location eastus2
-```
+### Minimum permissions for full automation
+
+| Permission | Needed for |
+|---|---|
+| `Application.ReadWrite.All` (application) | Creating/updating all 4 app registrations + SPs |
+| `AppRoleAssignment.ReadWrite.All` (application) | Granting admin consent for graph-middleware MS Graph app roles |
+| `DelegatedPermissionGrant.ReadWrite.All` (application) | Creating delegated OAuth2 grants for web → API scopes |
+| **Azure Contributor** on subscription | Creating all Azure resources |
+| **User Access Administrator** on subscription | Creating Key Vault RBAC role assignments |
+
+> David: If the deployer identity only has `Application.ReadWrite.All`, the app registrations will be created/updated correctly but admin consent for graph-middleware Graph permissions must be granted manually in the Entra portal.
 
 ---
 
@@ -223,8 +388,25 @@ az keyvault purge --name kv-wg-dev-<suffix> --location eastus2
 | File | Scope | Description |
 |---|---|---|
 | `main.bicep` | `subscription` | Orchestrator: creates RG, wires modules |
+| `modules/entraApps.bicep` | Entra tenant (Graph) | 4 app registrations + service principals |
 | `modules/appServicePlan.bicep` | resource group | Windows App Service Plan |
 | `modules/webApp.bicep` | resource group | Reusable Windows web app (system identity, always-on, HTTPS, cert loading) |
 | `modules/keyVault.bicep` | resource group | RBAC-enabled Key Vault; role assignments for each app's managed identity |
 | `modules/monitoring.bicep` | resource group | Log Analytics Workspace + workspace-based Application Insights |
 | `modules/communicationServices.bicep` | resource group | ACS + Email Service + Azure-managed domain |
+
+---
+
+## Environment Teardown
+
+```bash
+az group delete --name rg-woodgrove-dev --yes --no-wait
+az keyvault purge --name kv-wg-dev-<suffix> --location eastus2
+
+# Entra app registrations are NOT deleted by the resource group deletion.
+# Delete them separately if needed:
+az ad app delete --id <web-app-client-id>
+az ad app delete --id <api-app-client-id>
+az ad app delete --id <graph-middleware-client-id>
+az ad app delete --id <auth-api-client-id>
+```
