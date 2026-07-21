@@ -638,6 +638,8 @@ jobs:
           if ($showExit -ne 0) {
             $secretId = $null
           }
+          # Clear the non-zero exit code from the (expected) 'secret not found' az call so the step doesn't inherit it
+          $global:LASTEXITCODE = 0
 
           $exists = -not [string]::IsNullOrWhiteSpace($secretId)
           $shouldUpdate = $rotate -or -not $exists
