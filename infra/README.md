@@ -68,7 +68,7 @@ Use `false` for environments where app registrations were created before this Ia
 
 ## Prerequisites
 
-```bash
+```powershell
 az --version          # ≥ 2.60.0
 az bicep version      # ≥ 0.36.0  (az bicep upgrade if older)
 az login              # sign in with your corporate account
@@ -86,101 +86,110 @@ az account set --subscription "<subscription-id>"
 
 ### 1 — Create the deployer app registration
 
-```bash
+```powershell
 # Adjust display name / repo slug as needed
-APP_NAME="woodgrove-groceries-cicd-deployer"
-REPO="HartD92/woodgrove-groceries"
-TENANT_ID="<your-entra-external-id-tenant-id>"
-SUBSCRIPTION_ID="<your-azure-subscription-id>"
+$AppName = "woodgrove-groceries-cicd-deployer"
+$RepoSlug = "HartD92/woodgrove-groceries"
+$TenantId = "<your-entra-external-id-tenant-id>"
+$SubscriptionId = "<your-azure-subscription-id>"
 
 # Create the application
-APP_ID=$(az ad app create \
-  --display-name "$APP_NAME" \
-  --query appId -o tsv)
+$AppId = az ad app create `
+  --display-name $AppName `
+  --query appId -o tsv
 
-echo "Deployer Application (client) ID: $APP_ID"
+Write-Host "Deployer Application (client) ID: $AppId"
 
 # Create the service principal
-SP_OBJECT_ID=$(az ad sp create \
-  --id "$APP_ID" \
-  --query id -o tsv)
+$SpObjectId = az ad sp create `
+  --id $AppId `
+  --query id -o tsv
 
-echo "Deployer SP Object ID: $SP_OBJECT_ID"
+Write-Host "Deployer SP Object ID: $SpObjectId"
 ```
 
 ### 2 — Add federated identity credentials (FICs)
 
-```bash
+```powershell
 # FIC for pushes / merge to main
-az ad app federated-credential create \
-  --id "$APP_ID" \
-  --parameters '{
-    "name": "gha-main",
-    "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repo:'"$REPO"':ref:refs/heads/main",
-    "audiences": ["api://AzureADTokenExchange"]
-  }'
+$ficJson = @'
+{
+  "name": "gha-main",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "SUBJECT_PLACEHOLDER",
+  "audiences": ["api://AzureADTokenExchange"]
+}
+'@ -replace 'SUBJECT_PLACEHOLDER', "repo:$($RepoSlug):ref:refs/heads/main"
+$ficJson | Out-File -FilePath fic-main.json -Encoding utf8
+az ad app federated-credential create --id $AppId --parameters '@fic-main.json'
+Remove-Item fic-main.json
 
 # FIC for the GitHub Environment "azure-infra" (workflow_dispatch + approval)
-az ad app federated-credential create \
-  --id "$APP_ID" \
-  --parameters '{
-    "name": "gha-env-azure-infra",
-    "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repo:'"$REPO"':environment:azure-infra",
-    "audiences": ["api://AzureADTokenExchange"]
-  }'
+$ficJson = @'
+{
+  "name": "gha-env-azure-infra",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "SUBJECT_PLACEHOLDER",
+  "audiences": ["api://AzureADTokenExchange"]
+}
+'@ -replace 'SUBJECT_PLACEHOLDER', "repo:$($RepoSlug):environment:azure-infra"
+$ficJson | Out-File -FilePath fic-env.json -Encoding utf8
+az ad app federated-credential create --id $AppId --parameters '@fic-env.json'
+Remove-Item fic-env.json
 
 # Optional: FIC for pull requests (read-only what-if)
-az ad app federated-credential create \
-  --id "$APP_ID" \
-  --parameters '{
-    "name": "gha-pr",
-    "issuer": "https://token.actions.githubusercontent.com",
-    "subject": "repo:'"$REPO"':pull_request",
-    "audiences": ["api://AzureADTokenExchange"]
-  }'
+$ficJson = @'
+{
+  "name": "gha-pr",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "SUBJECT_PLACEHOLDER",
+  "audiences": ["api://AzureADTokenExchange"]
+}
+'@ -replace 'SUBJECT_PLACEHOLDER', "repo:$($RepoSlug):pull_request"
+$ficJson | Out-File -FilePath fic-pr.json -Encoding utf8
+az ad app federated-credential create --id $AppId --parameters '@fic-pr.json'
+Remove-Item fic-pr.json
 ```
 
 ### 3 — Grant Azure RBAC
 
-```bash
+```powershell
 # Contributor on the subscription (needed to create resource groups + resources)
-az role assignment create \
-  --assignee-object-id "$SP_OBJECT_ID" \
-  --assignee-principal-type ServicePrincipal \
-  --role Contributor \
-  --scope "/subscriptions/$SUBSCRIPTION_ID"
+az role assignment create `
+  --assignee-object-id $SpObjectId `
+  --assignee-principal-type ServicePrincipal `
+  --role Contributor `
+  --scope "/subscriptions/$SubscriptionId"
 
 # OPTIONAL but required for Key Vault RBAC assignments:
-az role assignment create \
-  --assignee-object-id "$SP_OBJECT_ID" \
-  --assignee-principal-type ServicePrincipal \
-  --role "User Access Administrator" \
-  --scope "/subscriptions/$SUBSCRIPTION_ID"
+az role assignment create `
+  --assignee-object-id $SpObjectId `
+  --assignee-principal-type ServicePrincipal `
+  --role "User Access Administrator" `
+  --scope "/subscriptions/$SubscriptionId"
 ```
 
 ### 4 — Grant MS Graph permissions + admin consent
 
-```bash
+```powershell
 # MS Graph service principal object ID (same in every tenant)
-MSGRAPH_SP=$(az ad sp show --id "00000003-0000-0000-c000-000000000000" --query id -o tsv)
+$MsGraphSp = az ad sp show --id "00000003-0000-0000-c000-000000000000" --query id -o tsv
 
 # Application.ReadWrite.All  (app role ID: 1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9)
-az ad app permission add \
-  --id "$APP_ID" \
-  --api "00000003-0000-0000-c000-000000000000" \
+az ad app permission add `
+  --id $AppId `
+  --api "00000003-0000-0000-c000-000000000000" `
   --api-permissions "1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9=Role"
 
 # AppRoleAssignment.ReadWrite.All  (needed to grant consent to other apps)
 # App role ID: 06b708a9-e830-4db3-a914-8e69da51d44f
-az ad app permission add \
-  --id "$APP_ID" \
-  --api "00000003-0000-0000-c000-000000000000" \
+az ad app permission add `
+  --id $AppId `
+  --api "00000003-0000-0000-c000-000000000000" `
   --api-permissions "06b708a9-e830-4db3-a914-8e69da51d44f=Role"
 
 # Admin consent (requires Global Administrator or Privileged Role Administrator)
-az ad app permission admin-consent --id "$APP_ID"
+az ad app permission admin-consent --id $AppId
 ```
 
 > **VERIFY:** The app role IDs above are the well-known stable GUIDs documented at  
@@ -218,7 +227,7 @@ In GitHub repository → **Settings → Environments → New environment**:
 
 ### Option B — Local CLI
 
-```bash
+```powershell
 az login
 az account set --subscription "<subscription-id>"
 
@@ -227,16 +236,16 @@ az bicep lint --file infra/main.bicep
 az bicep build --file infra/main.bicep
 
 # What-if (plan)
-az deployment sub what-if \
-  --location eastus2 \
-  --template-file infra/main.bicep \
+az deployment sub what-if `
+  --location eastus2 `
+  --template-file infra/main.bicep `
   --parameters infra/main.bicepparam
 
 # Deploy
-az deployment sub create \
-  --name woodgrove-deploy-dev \
-  --location eastus2 \
-  --template-file infra/main.bicep \
+az deployment sub create `
+  --name woodgrove-deploy-dev `
+  --location eastus2 `
+  --template-file infra/main.bicep `
   --parameters infra/main.bicepparam
 ```
 
@@ -246,25 +255,25 @@ az deployment sub create \
 
 > ⚠️ App settings using `@Microsoft.KeyVault(...)` references will show as "secret reference pending" until the corresponding KV secrets exist.
 
-```bash
-KV_NAME=$(az deployment sub show --name woodgrove-deploy-dev \
-  --query "properties.outputs.keyVaultName.value" -o tsv)
+```powershell
+$KvName = az deployment sub show --name woodgrove-deploy-dev `
+  --query "properties.outputs.keyVaultName.value" -o tsv
 
 # 1 — Application Insights connection string
-AI_CONN=$(az monitor app-insights component show \
-  --app appi-woodgrove-dev \
-  --resource-group rg-woodgrove-dev \
-  --query connectionString -o tsv)
-az keyvault secret set --vault-name $KV_NAME \
-  --name appinsights-connection-string --value "$AI_CONN"
+$AiConn = az monitor app-insights component show `
+  --app appi-woodgrove-dev `
+  --resource-group rg-woodgrove-dev `
+  --query connectionString -o tsv
+az keyvault secret set --vault-name $KvName `
+  --name appinsights-connection-string --value $AiConn
 
 # 2 — ACS connection string (primary key)
-ACS_CONN=$(az communication list-key \
-  --name acs-woodgrove-dev-<suffix> \
-  --resource-group rg-woodgrove-dev \
-  --query primaryConnectionString -o tsv)
-az keyvault secret set --vault-name $KV_NAME \
-  --name acs-connection-string --value "$ACS_CONN"
+$AcsConn = az communication list-key `
+  --name acs-woodgrove-dev-<suffix> `
+  --resource-group rg-woodgrove-dev `
+  --query primaryConnectionString -o tsv
+az keyvault secret set --vault-name $KvName `
+  --name acs-connection-string --value $AcsConn
 
 # 3 — Web app client secret (idempotent — automated by GitHub Actions when provisionEntraApps=true)
 #
@@ -274,24 +283,23 @@ az keyvault secret set --vault-name $KV_NAME \
 #   • rotate_web_secret=true dispatch input → FORCE RESET + KV update + prune expired app-reg creds
 #
 # For local/manual first-provision deploys (run only if the secret is absent in Key Vault):
-WEB_CLIENT_ID=$(az deployment sub show --name woodgrove-deploy-dev \
-  --query "properties.outputs.resolvedWebClientId.value" -o tsv)
-SECRET_JSON=$(az ad app credential reset \
-  --id "$WEB_CLIENT_ID" \
-  --append \
-  --display-name "cicd-managed-dev" \
-  --years 1 \
-  --output json)
-az keyvault secret set --vault-name $KV_NAME \
-  --name web-client-secret \
-  --value "$(echo $SECRET_JSON | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"password\"])')"
+$WebClientId = az deployment sub show --name woodgrove-deploy-dev `
+  --query "properties.outputs.resolvedWebClientId.value" -o tsv
+$SecretJson = az ad app credential reset `
+  --id $WebClientId `
+  --append `
+  --display-name "cicd-managed-dev" `
+  --years 1 `
+  -o json | ConvertFrom-Json
+az keyvault secret set --vault-name $KvName `
+  --name web-client-secret --value $SecretJson.password
 # NOTE: --append preserves existing credentials; the secret value is only
 # returned once at creation time.  endDateTime (1-year expiry) is set by
 # the CLI, not by Bicep (passwordCredentials is a Bicep write restriction).
 # To rotate via CI: Actions → Deploy Infrastructure → Run workflow → check rotate_web_secret.
 
 # 4 — Cloudflare API token / secret
-az keyvault secret set --vault-name $KV_NAME \
+az keyvault secret set --vault-name $KvName `
   --name cloudflare-api-secret --value "<paste-cloudflare-token>"
 ```
 
@@ -301,33 +309,37 @@ az keyvault secret set --vault-name $KV_NAME \
 
 `Microsoft.Graph/customAuthenticationExtensions` is **not available as a Bicep resource type** (v1.0 or beta, as of August 2025). Register it with `az rest` after deployment:
 
-```bash
-AUTH_HOST=$(az deployment sub show --name woodgrove-deploy-dev \
-  --query "properties.outputs.authAppHostName.value" -o tsv)
+```powershell
+$AuthHost = az deployment sub show --name woodgrove-deploy-dev `
+  --query "properties.outputs.authAppHostName.value" -o tsv
 
-AUTH_CLIENT_ID=$(az deployment sub show --name woodgrove-deploy-dev \
-  --query "properties.outputs.resolvedAuthClientId.value" -o tsv)
+$AuthClientId = az deployment sub show --name woodgrove-deploy-dev `
+  --query "properties.outputs.resolvedAuthClientId.value" -o tsv
 
-TENANT_ID="<your-entra-external-id-tenant-id>"
+$TenantId = "<your-entra-external-id-tenant-id>"
 
 # Create the custom authentication extension
-az rest \
-  --method POST \
-  --uri "https://graph.microsoft.com/v1.0/identity/customAuthenticationExtensions" \
-  --headers "Content-Type=application/json" \
-  --body '{
-    "@odata.type": "#microsoft.graph.onTokenIssuanceStartCustomExtension",
-    "displayName": "woodgrove-auth-api",
-    "description": "Woodgrove custom authentication extension",
-    "endpointConfiguration": {
-      "@odata.type": "#microsoft.graph.httpRequestEndpoint",
-      "targetUrl": "https://'"$AUTH_HOST"'/api/CustomAuthenticationExtension"
-    },
-    "authenticationConfiguration": {
-      "@odata.type": "#microsoft.graph.azureAdTokenAuthentication",
-      "resourceId": "'"$AUTH_CLIENT_ID"'"
-    }
-  }'
+# Build the body as a hashtable to avoid inline JSON quote-mangling on Windows
+$authExtBody = [ordered]@{
+  '@odata.type' = '#microsoft.graph.onTokenIssuanceStartCustomExtension'
+  displayName   = 'woodgrove-auth-api'
+  description   = 'Woodgrove custom authentication extension'
+  endpointConfiguration = [ordered]@{
+    '@odata.type' = '#microsoft.graph.httpRequestEndpoint'
+    targetUrl     = "https://$($AuthHost)/api/CustomAuthenticationExtension"
+  }
+  authenticationConfiguration = [ordered]@{
+    '@odata.type' = '#microsoft.graph.azureAdTokenAuthentication'
+    resourceId    = $AuthClientId
+  }
+}
+$authExtBody | ConvertTo-Json -Depth 5 | Out-File -FilePath auth-ext.json -Encoding utf8
+az rest `
+  --method POST `
+  --uri "https://graph.microsoft.com/v1.0/identity/customAuthenticationExtensions" `
+  --headers "Content-Type=application/json" `
+  --body '@auth-ext.json'
+Remove-Item auth-ext.json
 ```
 
 After creating the extension, wire it to your Entra External ID user flow in the portal:  
@@ -337,16 +349,16 @@ After creating the extension, wire it to your Entra External ID user flow in the
 
 ## Post-Deploy: Configure Custom Domains
 
-```bash
-APP_NAME="app-woodgrove-web-dev-<suffix>"
-RG="rg-woodgrove-dev"
+```powershell
+$AppName = "app-woodgrove-web-dev-<suffix>"
+$Rg = "rg-woodgrove-dev"
 
-az webapp config hostname add \
-  --webapp-name $APP_NAME --resource-group $RG \
+az webapp config hostname add `
+  --webapp-name $AppName --resource-group $Rg `
   --hostname woodgrovedemo.com
 
-az webapp config ssl bind \
-  --name $APP_NAME --resource-group $RG \
+az webapp config ssl bind `
+  --name $AppName --resource-group $Rg `
   --certificate-thumbprint "<thumbprint>" --ssl-type SNI
 ```
 
@@ -357,11 +369,11 @@ az webapp config ssl bind \
 The graph-middleware app uses certificate-based client authentication against Microsoft Graph.  
 Upload the PFX to Key Vault (cert sync to App Service is automatic via the Key Vault Certificate User role):
 
-```bash
-az keyvault certificate import \
-  --vault-name $KV_NAME \
-  --name graph-middleware-cert \
-  --file /path/to/cert.pfx \
+```powershell
+az keyvault certificate import `
+  --vault-name $KvName `
+  --name graph-middleware-cert `
+  --file /path/to/cert.pfx `
   --password "<pfx-password>"
 ```
 
@@ -414,7 +426,7 @@ After the cert syncs to App Service, **manually add its thumbprint to the graph-
 
 ## Environment Teardown
 
-```bash
+```powershell
 az group delete --name rg-woodgrove-dev --yes --no-wait
 az keyvault purge --name kv-wg-dev-<suffix> --location eastus2
 
