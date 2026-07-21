@@ -109,6 +109,7 @@ var allTags = union(tags, {
   environment: environmentName
   project: 'woodgrove-groceries'
   managedBy: 'bicep'
+  SecurityControl: 'Ignore'
 })
 
 // ============================================================

@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "15788509830996284014"
+      "templateHash": "6236179314733554327"
     }
   },
   "parameters": {
@@ -124,7 +124,7 @@
     "appInsightsName": "[format('appi-woodgrove-{0}', parameters('environmentName'))]",
     "acsName": "[format('acs-woodgrove-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
     "emailSvcName": "[format('email-woodgrove-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
-    "allTags": "[union(parameters('tags'), createObject('environment', parameters('environmentName'), 'project', 'woodgrove-groceries', 'managedBy', 'bicep'))]",
+    "allTags": "[union(parameters('tags'), createObject('environment', parameters('environmentName'), 'project', 'woodgrove-groceries', 'managedBy', 'bicep', 'SecurityControl', 'Ignore'))]",
     "kvRefAppInsights": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/appinsights-connection-string/)', variables('kvBaseUri'))]",
     "kvRefAcsConn": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/acs-connection-string/)', variables('kvBaseUri'))]",
     "kvRefWebSecret": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/web-client-secret/)', variables('kvBaseUri'))]",
