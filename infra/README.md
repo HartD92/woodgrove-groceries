@@ -88,6 +88,24 @@ az account set --subscription "<subscription-id>"
 >
 > The workforce↔ExtID billing link is **not** an authentication trust. A GitHub OIDC federated identity credential (FIC) is only valid in the tenant where that app registration lives.
 
+> [!WARNING]
+> **Determine your OIDC subject format FIRST.** Some GitHub organizations and enterprises enforce a customized OIDC subject claim that prepends immutable numeric IDs (owner ID + repo ID) to the subject. Microsoft-managed organizations commonly do this. Before creating any FIC, discover your effective subject prefix:
+>
+> ```powershell
+> gh api /repos/<owner>/<repo>/actions/oidc/customization/sub
+> ```
+>
+> Read the `sub_claim_prefix` field. If it looks like `repo:<owner>@<id>/<repo>@<id>`, use that exact prefix in every FIC subject. If it is absent, or the response uses the default plain `repo:<owner>/<repo>` prefix, use the standard slug form.
+>
+> For this repository, capture the prefix once and reuse it:
+>
+> ```powershell
+> $SubPrefix = (gh api /repos/HartD92/woodgrove-groceries/actions/oidc/customization/sub | ConvertFrom-Json).sub_claim_prefix
+> if (-not $SubPrefix) { $SubPrefix = "repo:HartD92/woodgrove-groceries" }
+> ```
+>
+> Build FIC subjects as `"$($SubPrefix):environment:azure-infra"` and `"$($SubPrefix):ref:refs/heads/main"`. Use the `$($SubPrefix)` subexpression form so PowerShell does not parse `:` as a drive qualifier.
+
 ### Tenant / identity map
 
 | Purpose | Tenant | GitHub variables | Permissions |
@@ -101,7 +119,8 @@ Use the existing workforce deploy identity if it already exists. If creating it 
 
 ```powershell
 $AppName = "woodgrove-groceries-arm-deployer"
-$RepoSlug = "HartD92/woodgrove-groceries"
+$SubPrefix = (gh api /repos/HartD92/woodgrove-groceries/actions/oidc/customization/sub | ConvertFrom-Json).sub_claim_prefix
+if (-not $SubPrefix) { $SubPrefix = "repo:HartD92/woodgrove-groceries" }
 $WorkforceTenantId = "<your-workforce-tenant-id>"
 $SubscriptionId = "<your-azure-subscription-id>"
 
@@ -117,24 +136,25 @@ $AzureSpObjectId = az ad sp create `
   --query id -o tsv
 
 $fic = [ordered]@{
-  name = 'gha-main'
-  issuer = 'https://token.actions.githubusercontent.com'
-  subject = "repo:$($RepoSlug):ref:refs/heads/main"
-  audiences = @('api://AzureADTokenExchange')
-}
-$fic | ConvertTo-Json -Depth 5 | Out-File -FilePath fic-main.json -Encoding utf8
-az ad app federated-credential create --id $AzureAppId --parameters '@fic-main.json'
-Remove-Item fic-main.json
-
-$fic = [ordered]@{
   name = 'gha-env-azure-infra'
   issuer = 'https://token.actions.githubusercontent.com'
-  subject = "repo:$($RepoSlug):environment:azure-infra"
+  subject = "$($SubPrefix):environment:azure-infra"
   audiences = @('api://AzureADTokenExchange')
 }
 $fic | ConvertTo-Json -Depth 5 | Out-File -FilePath fic-env.json -Encoding utf8
 az ad app federated-credential create --id $AzureAppId --parameters '@fic-env.json'
 Remove-Item fic-env.json
+
+# Optional FIC for non-environment triggers; deploy-infra.yml uses the azure-infra environment.
+$fic = [ordered]@{
+  name = 'gha-main'
+  issuer = 'https://token.actions.githubusercontent.com'
+  subject = "$($SubPrefix):ref:refs/heads/main"
+  audiences = @('api://AzureADTokenExchange')
+}
+$fic | ConvertTo-Json -Depth 5 | Out-File -FilePath fic-main.json -Encoding utf8
+az ad app federated-credential create --id $AzureAppId --parameters '@fic-main.json'
+Remove-Item fic-main.json
 
 az role assignment create `
   --assignee-object-id $AzureSpObjectId `
@@ -163,7 +183,8 @@ Sign in to the **External ID / CIAM tenant**. This identity does not need Azure 
 
 ```powershell
 $AppName = "woodgrove-groceries-extid-entra-provisioner"
-$RepoSlug = "HartD92/woodgrove-groceries"
+$SubPrefix = (gh api /repos/HartD92/woodgrove-groceries/actions/oidc/customization/sub | ConvertFrom-Json).sub_claim_prefix
+if (-not $SubPrefix) { $SubPrefix = "repo:HartD92/woodgrove-groceries" }
 $ExtIdTenantId = "<your-entra-external-id-tenant-id>"
 
 az login --tenant $ExtIdTenantId --allow-no-subscriptions
@@ -176,27 +197,27 @@ $EntrSpObjectId = az ad sp create `
   --id $EntrAppId `
   --query id -o tsv
 
-# FIC for pushes / merge to main
-$fic = [ordered]@{
-  name = 'gha-main'
-  issuer = 'https://token.actions.githubusercontent.com'
-  subject = "repo:$($RepoSlug):ref:refs/heads/main"
-  audiences = @('api://AzureADTokenExchange')
-}
-$fic | ConvertTo-Json -Depth 5 | Out-File -FilePath fic-main.json -Encoding utf8
-az ad app federated-credential create --id $EntrAppId --parameters '@fic-main.json'
-Remove-Item fic-main.json
-
-# FIC for the GitHub Environment "azure-infra" (workflow_dispatch + approval)
+# FIC for the GitHub Environment "azure-infra" (used by deploy-infra.yml)
 $fic = [ordered]@{
   name = 'gha-env-azure-infra'
   issuer = 'https://token.actions.githubusercontent.com'
-  subject = "repo:$($RepoSlug):environment:azure-infra"
+  subject = "$($SubPrefix):environment:azure-infra"
   audiences = @('api://AzureADTokenExchange')
 }
 $fic | ConvertTo-Json -Depth 5 | Out-File -FilePath fic-env.json -Encoding utf8
 az ad app federated-credential create --id $EntrAppId --parameters '@fic-env.json'
 Remove-Item fic-env.json
+
+# Optional FIC for non-environment triggers.
+$fic = [ordered]@{
+  name = 'gha-main'
+  issuer = 'https://token.actions.githubusercontent.com'
+  subject = "$($SubPrefix):ref:refs/heads/main"
+  audiences = @('api://AzureADTokenExchange')
+}
+$fic | ConvertTo-Json -Depth 5 | Out-File -FilePath fic-main.json -Encoding utf8
+az ad app federated-credential create --id $EntrAppId --parameters '@fic-main.json'
+Remove-Item fic-main.json
 ```
 
 Grant Microsoft Graph permissions and admin consent in the **ExtID tenant**:
@@ -240,6 +261,10 @@ Set GitHub Actions variables:
 In GitHub repository → **Settings → Environments → New environment**:
 - Name: `azure-infra`
 - Add required reviewers for production protection (optional for dev)
+
+### Troubleshooting OIDC FIC matching
+
+If a workflow run fails at `azure/login` with `AADSTS700213: No matching federated identity record found`, copy the exact `presented assertion subject` value from the run log. In the tenant being logged into, ensure the app registration has a FIC with that **exact** subject string. The environment subject is the one actually used by both `deploy-infra.yml` jobs because they specify `environment: azure-infra`; the main-branch ref subject is only for non-environment triggers.
 
 ---
 
