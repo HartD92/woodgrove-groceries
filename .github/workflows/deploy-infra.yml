@@ -626,15 +626,16 @@ jobs:
           $kvName = $outputs.keyVaultName.value
           $rotate = [System.Convert]::ToBoolean($env:ROTATE_WEB_SECRET)
 
-          $secretId = $null
-          try {
-            $secretId = az keyvault secret show `
-              --vault-name $kvName `
-              --name web-client-secret `
-              --query id `
-              --output tsv 2>$null
-          }
-          catch {
+          $prevEap = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
+          $secretId = az keyvault secret show `
+            --vault-name $kvName `
+            --name web-client-secret `
+            --query id `
+            --output tsv 2>$null
+          $showExit = $LASTEXITCODE
+          $ErrorActionPreference = $prevEap
+          if ($showExit -ne 0) {
             $secretId = $null
           }
 
@@ -717,11 +718,24 @@ jobs:
           try {
             $clientSecret = Get-Content -Path $secretPath -Raw
             Write-Host "::add-mask::$clientSecret"
-            az keyvault secret set `
-              --vault-name '${{ steps.web_secret_check.outputs.kv_name }}' `
-              --name web-client-secret `
-              --value $clientSecret `
-              --output none
+            $maxAttempts = 6
+            for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+              az keyvault secret set `
+                --vault-name '${{ steps.web_secret_check.outputs.kv_name }}' `
+                --name web-client-secret `
+                --value $clientSecret `
+                --output none
+              if ($LASTEXITCODE -eq 0) {
+                break
+              }
+
+              if ($attempt -eq $maxAttempts) {
+                throw "Failed to store web-client-secret in Key Vault after $maxAttempts attempts."
+              }
+
+              Write-Host "Key Vault secret set failed (attempt $attempt/$maxAttempts); waiting 15 seconds for RBAC propagation..."
+              Start-Sleep -Seconds 15
+            }
             Write-Host "web-client-secret stored in Key Vault ${{ steps.web_secret_check.outputs.kv_name }}"
           }
           finally {
