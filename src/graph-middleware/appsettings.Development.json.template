@@ -1,14 +1,14 @@
 {
   "AzureAd": {
-    "Instance": "https://your-tenant.ciamlogin.com/",
-    "TenantId": "11111111-0000-0000-00000000000000000",
-    "ClientId": "22222222-0000-0000-00000000000000000",
+    "Instance": "https://<tenant-name>.ciamlogin.com/",
+    "TenantId": "<tenant-id>",
+    "ClientId": "<client-id>",
     "EnablePiiLogging": false,
     "ClientCertificates": [
       {
        "SourceType": "StoreWithThumbprint",
         "CertificateStorePath": "CurrentUser/My",
-        "CertificateThumbprint": "<Your certificate thumbprint>"
+        "CertificateThumbprint": "<cert-thumbprint>"
       }]
   },
   "GraphApi": {
