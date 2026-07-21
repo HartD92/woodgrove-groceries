@@ -160,7 +160,7 @@ public class SendCodeController : ControllerBase
         }
         catch (System.Exception ex)
         {
-            throw ex;
+            throw;
         }
     }
 }

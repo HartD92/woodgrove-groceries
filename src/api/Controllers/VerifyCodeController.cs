@@ -54,8 +54,8 @@ public class VerifyCodeController : ControllerBase
                 response.AuthType = cachedAuthMethod.AuthType;
                 response.AuthValue = cachedAuthMethod.AuthValue;
 
-                // Update the verification code with a random value and save it back to the cache
-                cachedAuthMethod.VerificationCode = new Guid().ToString();
+                // Update the verification code with a fresh random value to invalidate it
+                cachedAuthMethod.VerificationCode = Guid.NewGuid().ToString();
                 var cacheEntryOptions = new MemoryCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromHours(1));
                 _memoryCache.Set(userID, cachedAuthMethod, cacheEntryOptions);
             }

@@ -87,6 +87,7 @@ public class UserRolesController : ControllerBase
         return userRoles;
     }
 
+    [HttpGet]
     public async Task<IActionResult> GetAsync()
     {
 

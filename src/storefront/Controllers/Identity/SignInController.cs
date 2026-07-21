@@ -29,6 +29,7 @@ public class SignInController : ControllerBase
         _authorizationHeaderProvider = authorizationHeaderProvider;
     }
 
+    [HttpGet]
     public async Task<IActionResult> OnGetDefault(string handler, string? id = null)
     {
         // Retrieve the demo by the handler ID (case-insensitive).

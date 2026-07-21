@@ -33,6 +33,7 @@ public class UserMoreInfoController : ControllerBase
         _telemetry = telemetry;
     }
 
+    [HttpGet]
     public async Task<IActionResult> GetAsync()
     {
         UserMoreInfo userMoreInfo = new UserMoreInfo();
