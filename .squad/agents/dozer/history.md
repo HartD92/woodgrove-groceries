@@ -9,3 +9,10 @@
 - **Initial mission:** author Bicep to deploy everything to Azure, and advise on how a monorepo layout should map to deployable units.
 
 📌 Team update (2026-07-21T07:45:38Z): Completed Azure topology survey + infrastructure design. Recommended Windows App Service (not Container Apps): documented per-service profiles, inter-service call graph, full Azure resource list (ASP, 4x App Services, Key Vault, AppInsights, Log Analytics, ACS), naming convention, certificate strategy. Ready for Bicep IaC authoring. Decision merged by Scribe into shared log.
+
+📌 Team update (2026-07-21T09:30:00Z): Completed Entra IaC authoring. Extended infra/ with bicepconfig.json (MS Graph v1.0 extension), entraApps.bicep (4 app registrations), deploy-infra.yml (OIDC passwordless workflow). Identified critical passwordCredentials blocker by Fact Checker verification + patched (63564d2): removed Bicep passwordCredentials block, automated web secret via `az ad app credential reset` in workflow. Both commits on squad/monorepo-consolidation, not pushed.
+
+📌 Team update (2026-07-21T10:35:00Z): Applied PR #1 code-review fix. Made deploy-infra.yml web-client-secret provisioning idempotent: skip on subsequent pushes (secret already in KV), create only on first provision, rotate only via explicit workflow_dispatch input (prunes expired credentials defensively). Closes final PR #1 code-review item. Commit e3d8a6b, pushed to PR #1. All PR #1 review items resolved.
+
+📌 Team update (2026-07-21T11:55:23-07:00): ExtID CI/CD now uses a two-identity/two-job split. Trinity root-caused AADSTS70021 and Graph Bicep tenant targeting; Dozer implemented PR #3 at commit c5372ff with workforce ARM deployment plus ExtID Entra provisioning. — decided by David/Coordinator
+
