@@ -266,9 +266,14 @@ ACS_CONN=$(az communication list-key \
 az keyvault secret set --vault-name $KV_NAME \
   --name acs-connection-string --value "$ACS_CONN"
 
-# 3 — Web app client secret (automated via addPassword when provisionEntraApps=true)
-# When deploying via GitHub Actions the workflow creates the credential and
-# seeds it automatically.  For local/manual deploys run the same command:
+# 3 — Web app client secret (idempotent — automated by GitHub Actions when provisionEntraApps=true)
+#
+# The deploy workflow is now idempotent for this secret:
+#   • If web-client-secret already exists in Key Vault → SKIP (no credential is minted or rotated)
+#   • If absent (first provision) + provisionEntraApps=true → CREATE a 1-year credential via addPassword
+#   • rotate_web_secret=true dispatch input → FORCE RESET + KV update + prune expired app-reg creds
+#
+# For local/manual first-provision deploys (run only if the secret is absent in Key Vault):
 WEB_CLIENT_ID=$(az deployment sub show --name woodgrove-deploy-dev \
   --query "properties.outputs.resolvedWebClientId.value" -o tsv)
 SECRET_JSON=$(az ad app credential reset \
@@ -283,15 +288,16 @@ az keyvault secret set --vault-name $KV_NAME \
 # NOTE: --append preserves existing credentials; the secret value is only
 # returned once at creation time.  endDateTime (1-year expiry) is set by
 # the CLI, not by Bicep (passwordCredentials is a Bicep write restriction).
+# To rotate via CI: Actions → Deploy Infrastructure → Run workflow → check rotate_web_secret.
 
 # 4 — Cloudflare API token / secret
 az keyvault secret set --vault-name $KV_NAME \
   --name cloudflare-api-secret --value "<paste-cloudflare-token>"
 ```
 
----
+> **Rotating `web-client-secret`:** Trigger **Actions → Deploy Infrastructure → Run workflow**, set `rotate_web_secret = true`. The workflow will reset the credential with `--append` (so a valid secret is always live), write the new value to Key Vault, and then prune any **expired** credentials from the app registration to prevent orphaned-but-valid creds from accumulating. Never run `az ad app credential reset` unconditionally on every `infra/**` push — doing so mints new credentials each time and leaves the old ones alive until their 1-year expiry.
 
-## Post-Deploy: Register the Custom Authentication Extension (Manual)
+---
 
 `Microsoft.Graph/customAuthenticationExtensions` is **not available as a Bicep resource type** (v1.0 or beta, as of August 2025). Register it with `az rest` after deployment:
 

@@ -41,6 +41,11 @@ on:
         options:
           - 'true'
           - 'false'
+      rotate_web_secret:
+        description: 'Force rotation of web-client-secret in Key Vault (even if the secret already exists). Triggers expired-credential pruning on the app registration.'
+        required: false
+        default: false
+        type: boolean
 
   # Auto-trigger on pushes to main that touch infra/**
   push:
@@ -127,14 +132,20 @@ jobs:
             --output json | tee deploy-output.json
 
       # ------------------------------------------------------------------
-      # 6. Post-deploy: create web app client secret via addPassword action
-      #    and store it directly in Key Vault.
-      #    Only runs when provisionEntraApps=true because otherwise the web
-      #    app registration already exists and its secret is already in KV.
+      # 6. Post-deploy: web-client-secret idempotency guard
+      #
+      #    • Secret already in Key Vault AND rotate_web_secret=false → SKIP
+      #    • Secret absent (first provision) + provisionEntraApps=true  → CREATE
+      #    • rotate_web_secret=true → FORCE RESET + update KV + prune expired creds
+      #
+      #    Runs when provisionEntraApps=true (normal deploys) OR
+      #    rotate_web_secret=true (explicit rotation dispatch).
       # ------------------------------------------------------------------
-      - name: Create web client secret and seed Key Vault
-        if: env.PROVISION_ENTRA == 'true'
+      - name: Create or rotate web client secret (idempotent)
+        if: env.PROVISION_ENTRA == 'true' || github.event.inputs.rotate_web_secret == 'true'
         run: |
+          set -euo pipefail
+
           WEB_CLIENT_ID=$(python3 -c "
           import json, sys
           data = json.load(open('deploy-output.json'))
@@ -147,27 +158,122 @@ jobs:
           ")
 
           echo "::add-mask::$WEB_CLIENT_ID"
-          echo "Generating client secret for app $WEB_CLIENT_ID"
 
-          # addPassword via az ad app credential reset --append
-          # --append preserves any existing credentials; --years 1 sets 1-year expiry
-          SECRET_JSON=$(az ad app credential reset \
-            --id "$WEB_CLIENT_ID" \
-            --append \
-            --display-name "cicd-managed-${ENV_NAME}" \
-            --years 1 \
-            --output json)
+          ROTATE="${{ github.event.inputs.rotate_web_secret }}"
+          ROTATE="${ROTATE:-false}"  # push trigger has no inputs → normalise to 'false'
 
-          CLIENT_SECRET=$(echo "$SECRET_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['password'])")
-          echo "::add-mask::$CLIENT_SECRET"
-
-          az keyvault secret set \
+          # ----------------------------------------------------------------
+          # Check whether web-client-secret already exists in Key Vault.
+          # A "not found" response is expected on first provision — not an
+          # error.  Temporarily disable exit-on-error to capture the code.
+          # ----------------------------------------------------------------
+          set +e
+          SECRET_CHECK=$(az keyvault secret show \
             --vault-name "$KV_NAME" \
             --name web-client-secret \
-            --value "$CLIENT_SECRET" \
-            --output none
+            --query "id" \
+            --output tsv 2>/dev/null)
+          KV_EXIT=$?
+          set -e
 
-          echo "✅ web-client-secret seeded into Key Vault $KV_NAME"
+          KV_SECRET_EXISTS=false
+          if [ "$KV_EXIT" -eq 0 ] && [ -n "$SECRET_CHECK" ]; then
+            KV_SECRET_EXISTS=true
+          fi
+
+          if [ "$KV_SECRET_EXISTS" = "true" ] && [ "$ROTATE" != "true" ]; then
+            # ----------------------------------------------------------------
+            # Secret present, no rotation requested → idempotent skip
+            # ----------------------------------------------------------------
+            echo "ℹ️  web-client-secret already present in Key Vault — skipping creation (use rotate_web_secret to force rotation)"
+
+          elif [ "$ROTATE" = "true" ]; then
+            # ----------------------------------------------------------------
+            # Explicit rotation — reset credential, update KV, prune expired creds
+            # --append so the new credential is live before old ones are pruned
+            # (avoids a window with no valid secret during rotation)
+            # ----------------------------------------------------------------
+            echo "rotate_web_secret=true — forcing credential rotation for app $WEB_CLIENT_ID"
+
+            SECRET_JSON=$(az ad app credential reset \
+              --id "$WEB_CLIENT_ID" \
+              --append \
+              --display-name "cicd-managed-${ENV_NAME}" \
+              --years 1 \
+              --output json)
+
+            NEW_KEY_ID=$(echo "$SECRET_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['keyId'])")
+            CLIENT_SECRET=$(echo "$SECRET_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['password'])")
+            echo "::add-mask::$CLIENT_SECRET"
+
+            az keyvault secret set \
+              --vault-name "$KV_NAME" \
+              --name web-client-secret \
+              --value "$CLIENT_SECRET" \
+              --output none
+
+            echo "✅ web-client-secret rotated in Key Vault $KV_NAME"
+
+            # ----------------------------------------------------------------
+            # Prune expired credentials from the app registration.
+            # Defensive: listing/parsing failures are non-fatal — skip pruning
+            # rather than risk deleting a live credential on a transient error.
+            # ----------------------------------------------------------------
+            echo "Pruning expired credentials from app registration $WEB_CLIENT_ID..."
+            set +e
+            CRED_LIST=$(az ad app credential list --id "$WEB_CLIENT_ID" --output json 2>/dev/null)
+            PRUNE_EXIT=$?
+            set -e
+
+            if [ "$PRUNE_EXIT" -eq 0 ] && [ -n "$CRED_LIST" ]; then
+              EXPIRED_IDS=$(echo "$CRED_LIST" | NEW_KEY_ID="$NEW_KEY_ID" python3 -c "
+          import json, sys, os
+          from datetime import datetime, timezone
+          creds = json.load(sys.stdin)
+          new_key_id = os.environ.get('NEW_KEY_ID', '')
+          now = datetime.now(timezone.utc)
+          def is_expired(c):
+              if c.get('keyId', '') == new_key_id: return False
+              try:
+                  return datetime.fromisoformat(c.get('endDateTime', '').replace('Z', '+00:00')) < now
+              except Exception: return False
+          [print(c['keyId']) for c in creds if c.get('keyId') and is_expired(c)]
+          ")
+              for KID in $EXPIRED_IDS; do
+                echo "  Deleting expired credential keyId=$KID"
+                az ad app credential delete --id "$WEB_CLIENT_ID" --key-id "$KID" --output none 2>/dev/null \
+                  && echo "  ✓ Deleted $KID" \
+                  || echo "  ⚠️  Could not delete $KID — skipping (non-fatal)"
+              done
+              echo "Expired-credential pruning complete."
+            else
+              echo "⚠️  Could not list credentials for pruning — skipping (non-fatal)"
+            fi
+
+          else
+            # ----------------------------------------------------------------
+            # Secret absent — first provision with provisionEntraApps=true
+            # ----------------------------------------------------------------
+            echo "First provision: generating client secret for app $WEB_CLIENT_ID"
+
+            SECRET_JSON=$(az ad app credential reset \
+              --id "$WEB_CLIENT_ID" \
+              --append \
+              --display-name "cicd-managed-${ENV_NAME}" \
+              --years 1 \
+              --output json)
+
+            CLIENT_SECRET=$(echo "$SECRET_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['password'])")
+            echo "::add-mask::$CLIENT_SECRET"
+
+            az keyvault secret set \
+              --vault-name "$KV_NAME" \
+              --name web-client-secret \
+              --value "$CLIENT_SECRET" \
+              --output none
+
+            echo "✅ web-client-secret seeded into Key Vault $KV_NAME"
+          fi
 
       # ------------------------------------------------------------------
       # 7. Surface outputs as job summary
