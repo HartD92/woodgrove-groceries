@@ -9,6 +9,7 @@ namespace woodgroveapi.Controllers;
 //[Authorize]
 [ApiController]
 [Route("[controller]")]
+[DevelopmentOnly]
 public class SignUpStartsTestController : ControllerBase
 {
     private readonly ILogger<SignUpStartsTestController> _logger;

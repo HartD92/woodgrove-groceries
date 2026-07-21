@@ -2,6 +2,7 @@ using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using woodgroveapi.Helpers;
 using woodgroveapi.Models;
 
 namespace woodgroveapi.Controllers;
@@ -10,6 +11,7 @@ namespace woodgroveapi.Controllers;
 //[Authorize]
 [ApiController]
 [Route("[controller]")]
+[DevelopmentOnly]
 public class EchoController : ControllerBase
 {
     private readonly ILogger<EchoController> _logger;
@@ -30,16 +32,6 @@ public class EchoController : ControllerBase
         _telemetry.TrackPageView(pageView);
 
         _logger.LogInformation($"#### call to: {this.GetType().Name}");
-
-        // Validate that REST API received a bearer token in the authorization header.
-        if (Request.Headers.Authorization.Count == 0)
-        {
-            _logger.LogInformation("#### authorization header not found");
-        }
-        else
-        {
-            _logger.LogInformation($"#### authorization header: {Request.Headers.Authorization[0]}");
-        }
 
         // Echo the input data
         string requestBody = await new StreamReader(this.Request.Body).ReadToEndAsync();
