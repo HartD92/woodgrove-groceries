@@ -13,8 +13,8 @@ param appPrincipalIds array = []
 // ------------------------------------------------------------------
 // Built-in Azure RBAC role definition IDs (same in every tenant/sub)
 // ------------------------------------------------------------------
-var kvSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e0' // Key Vault Secrets User
-var kvCertsUserRoleId   = 'db79e9a7-68ee-423b-be9e-b00bd69e8b11' // Key Vault Certificate User
+var kvSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
+var kvCertsUserRoleId   = 'db79e9a7-68ee-4b58-9aeb-b90e7c24fcba' // Key Vault Certificate User
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: name
