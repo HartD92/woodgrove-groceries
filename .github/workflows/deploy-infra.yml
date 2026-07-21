@@ -102,10 +102,59 @@ jobs:
             return ([Guid]::new($hash)).ToString()
           }
 
+          function Invoke-WithRetry {
+            param(
+              [Parameter(Mandatory)][scriptblock] $Action,
+              [int] $MaxAttempts = 10,
+              [int] $DelaySeconds = 6,
+              [string] $Description = 'operation'
+            )
+
+            for ($i = 1; $i -le $MaxAttempts; $i++) {
+              $global:LASTEXITCODE = 0
+              $result = $null
+              try {
+                $result = & $Action
+              }
+              catch {
+                $result = $null
+              }
+
+              if ($LASTEXITCODE -eq 0 -and $null -ne $result) {
+                return $result
+              }
+
+              if ($i -lt $MaxAttempts) {
+                Write-Host "Attempt $i/$MaxAttempts failed: $Description — retrying in ${DelaySeconds}s"
+                Start-Sleep -Seconds $DelaySeconds
+              }
+            }
+
+            throw "Failed after $MaxAttempts attempts: $Description"
+          }
+
           function Get-AppByDisplayName {
             param([Parameter(Mandatory)][string] $DisplayName)
-            $apps = az ad app list --display-name $DisplayName --output json | ConvertFrom-Json
-            return @($apps | Where-Object { $_.displayName -eq $DisplayName } | Select-Object -First 1)[0]
+            $listResult = Invoke-WithRetry -Description "list app registrations named $DisplayName" -Action {
+              $apps = az ad app list --display-name $DisplayName --output json | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0) { return $null }
+              return [pscustomobject]@{ Apps = @($apps) }
+            }
+            return @($listResult.Apps | Where-Object { $_.displayName -eq $DisplayName } | Select-Object -First 1)[0]
+          }
+
+          function Get-AppRegistrationByAppId {
+            param(
+              [Parameter(Mandatory)][string] $AppId,
+              [string] $Description = "show app registration $AppId"
+            )
+
+            return Invoke-WithRetry -Description $Description -Action {
+              $app = az ad app show --id $AppId --output json | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0) { return $null }
+              if ($null -eq $app -or [string]::IsNullOrWhiteSpace($app.id) -or [string]::IsNullOrWhiteSpace($app.appId)) { return $null }
+              return $app
+            }
           }
 
           function Ensure-AppRegistration {
@@ -113,16 +162,21 @@ jobs:
             $app = Get-AppByDisplayName -DisplayName $DisplayName
             if ($null -eq $app) {
               Write-Host "Creating app registration: $DisplayName"
-              $app = az ad app create `
-                --display-name $DisplayName `
-                --sign-in-audience AzureADMyOrg `
-                --output json | ConvertFrom-Json
+              $app = Invoke-WithRetry -Description "create app registration: $DisplayName" -Action {
+                $createdApp = az ad app create `
+                  --display-name $DisplayName `
+                  --sign-in-audience AzureADMyOrg `
+                  --output json | ConvertFrom-Json
+                if ($LASTEXITCODE -ne 0) { return $null }
+                if ($null -eq $createdApp -or [string]::IsNullOrWhiteSpace($createdApp.appId)) { return $null }
+                return $createdApp
+              }
             }
             else {
               Write-Host "Reusing app registration: $DisplayName ($($app.appId))"
             }
 
-            return az ad app show --id $app.appId --output json | ConvertFrom-Json
+            return Get-AppRegistrationByAppId -AppId $app.appId -Description "show app registration: $DisplayName ($($app.appId))"
           }
 
           function Invoke-GraphPatch {
@@ -132,20 +186,50 @@ jobs:
             )
             $bodyPath = Join-Path $PWD '.gha-graph-body.json'
             $Body | ConvertTo-Json -Depth 30 | Out-File -FilePath $bodyPath -Encoding utf8
-            az rest `
-              --method PATCH `
-              --uri $Uri `
-              --headers 'Content-Type=application/json' `
-              --body "@$bodyPath" `
-              --output none
-            Remove-Item $bodyPath -Force
+            try {
+              $null = Invoke-WithRetry -Description "PATCH $Uri" -Action {
+                az rest `
+                  --method PATCH `
+                  --uri $Uri `
+                  --headers 'Content-Type=application/json' `
+                  --body "@$bodyPath" `
+                  --output none
+                if ($LASTEXITCODE -ne 0) { return $null }
+                return $true
+              }
+            }
+            finally {
+              Remove-Item $bodyPath -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          function Get-ServicePrincipalByAppId {
+            param(
+              [Parameter(Mandatory)][string] $AppId,
+              [string] $Description = "show service principal $AppId"
+            )
+
+            return Invoke-WithRetry -Description $Description -Action {
+              $sp = az ad sp show --id $AppId --output json | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0) { return $null }
+              if ($null -eq $sp -or [string]::IsNullOrWhiteSpace($sp.id)) { return $null }
+              return $sp
+            }
           }
 
           function Ensure-ServicePrincipal {
             param([Parameter(Mandatory)][string] $AppId)
+            if ([string]::IsNullOrWhiteSpace($AppId)) {
+              throw 'Ensure-ServicePrincipal: AppId is empty'
+            }
+
             $sp = $null
+            $global:LASTEXITCODE = 0
             try {
               $sp = az ad sp show --id $AppId --output json 2>$null | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0 -or $null -eq $sp -or [string]::IsNullOrWhiteSpace($sp.id)) {
+                $sp = $null
+              }
             }
             catch {
               $sp = $null
@@ -153,13 +237,18 @@ jobs:
 
             if ($null -eq $sp) {
               Write-Host "Creating service principal for appId $AppId"
-              $sp = az ad sp create --id $AppId --output json | ConvertFrom-Json
+              $null = Invoke-WithRetry -Description "create service principal for appId $AppId" -Action {
+                $createdSp = az ad sp create --id $AppId --output json | ConvertFrom-Json
+                if ($LASTEXITCODE -ne 0) { return $null }
+                if ($null -eq $createdSp -or [string]::IsNullOrWhiteSpace($createdSp.id)) { return $null }
+                return $createdSp
+              }
             }
             else {
               Write-Host "Reusing service principal for appId $AppId"
             }
 
-            return $sp
+            return Get-ServicePrincipalByAppId -AppId $AppId -Description "show service principal for appId $AppId"
           }
 
           function Ensure-AppRoleAssignment {
@@ -169,10 +258,15 @@ jobs:
               [Parameter(Mandatory)][string] $AppRoleId
             )
 
-            $assignments = az rest `
-              --method GET `
-              --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalServicePrincipalId/appRoleAssignments" `
-              --output json | ConvertFrom-Json
+            $assignments = Invoke-WithRetry -Description "list app role assignments for $PrincipalServicePrincipalId" -Action {
+              $response = az rest `
+                --method GET `
+                --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalServicePrincipalId/appRoleAssignments" `
+                --output json | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0) { return $null }
+              if ($null -eq $response) { return $null }
+              return $response
+            }
             $existing = @($assignments.value | Where-Object {
               $_.resourceId -eq $ResourceServicePrincipalId -and $_.appRoleId -eq $AppRoleId
             })
@@ -185,13 +279,21 @@ jobs:
               }
               $bodyPath = Join-Path $PWD '.gha-app-role-assignment.json'
               $body | ConvertTo-Json -Depth 5 | Out-File -FilePath $bodyPath -Encoding utf8
-              az rest `
-                --method POST `
-                --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalServicePrincipalId/appRoleAssignments" `
-                --headers 'Content-Type=application/json' `
-                --body "@$bodyPath" `
-                --output none
-              Remove-Item $bodyPath -Force
+              try {
+                $null = Invoke-WithRetry -Description "create app role assignment $AppRoleId" -Action {
+                  az rest `
+                    --method POST `
+                    --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalServicePrincipalId/appRoleAssignments" `
+                    --headers 'Content-Type=application/json' `
+                    --body "@$bodyPath" `
+                    --output none
+                  if ($LASTEXITCODE -ne 0) { return $null }
+                  return $true
+                }
+              }
+              finally {
+                Remove-Item $bodyPath -Force -ErrorAction SilentlyContinue
+              }
             }
           }
 
@@ -203,10 +305,15 @@ jobs:
             )
 
             $encodedFilter = [System.Uri]::EscapeDataString("clientId eq '$ClientServicePrincipalId' and resourceId eq '$ResourceServicePrincipalId'")
-            $grants = az rest `
-              --method GET `
-              --uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=$encodedFilter" `
-              --output json | ConvertFrom-Json
+            $grants = Invoke-WithRetry -Description "list OAuth2 permission grants for $ClientServicePrincipalId" -Action {
+              $response = az rest `
+                --method GET `
+                --uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=$encodedFilter" `
+                --output json | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0) { return $null }
+              if ($null -eq $response) { return $null }
+              return $response
+            }
             $existing = @($grants.value | Select-Object -First 1)[0]
             $requestedScopes = @($Scope -split ' ' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 
@@ -218,13 +325,21 @@ jobs:
                 $body = [ordered]@{ scope = $mergedScope }
                 $bodyPath = Join-Path $PWD '.gha-oauth2-grant.json'
                 $body | ConvertTo-Json -Depth 5 | Out-File -FilePath $bodyPath -Encoding utf8
-                az rest `
-                  --method PATCH `
-                  --uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants/$($existing.id)" `
-                  --headers 'Content-Type=application/json' `
-                  --body "@$bodyPath" `
-                  --output none
-                Remove-Item $bodyPath -Force
+                try {
+                  $null = Invoke-WithRetry -Description "update OAuth2 permission grant $($existing.id)" -Action {
+                    az rest `
+                      --method PATCH `
+                      --uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants/$($existing.id)" `
+                      --headers 'Content-Type=application/json' `
+                      --body "@$bodyPath" `
+                      --output none
+                    if ($LASTEXITCODE -ne 0) { return $null }
+                    return $true
+                  }
+                }
+                finally {
+                  Remove-Item $bodyPath -Force -ErrorAction SilentlyContinue
+                }
               }
               return
             }
@@ -237,13 +352,21 @@ jobs:
             }
             $bodyPath = Join-Path $PWD '.gha-oauth2-grant.json'
             $body | ConvertTo-Json -Depth 5 | Out-File -FilePath $bodyPath -Encoding utf8
-            az rest `
-              --method POST `
-              --uri 'https://graph.microsoft.com/v1.0/oauth2PermissionGrants' `
-              --headers 'Content-Type=application/json' `
-              --body "@$bodyPath" `
-              --output none
-            Remove-Item $bodyPath -Force
+            try {
+              $null = Invoke-WithRetry -Description "create OAuth2 permission grant for $ClientServicePrincipalId" -Action {
+                az rest `
+                  --method POST `
+                  --uri 'https://graph.microsoft.com/v1.0/oauth2PermissionGrants' `
+                  --headers 'Content-Type=application/json' `
+                  --body "@$bodyPath" `
+                  --output none
+                if ($LASTEXITCODE -ne 0) { return $null }
+                return $true
+              }
+            }
+            finally {
+              Remove-Item $bodyPath -Force -ErrorAction SilentlyContinue
+            }
           }
 
           $apiDisplayName = "woodgrove-groceries-api ($envName)"
@@ -276,7 +399,7 @@ jobs:
                 )
               }
             })
-          $apiApp = az ad app show --id $apiApp.appId --output json | ConvertFrom-Json
+          $apiApp = Get-AppRegistrationByAppId -AppId $apiApp.appId -Description "show app registration after API patch: $apiDisplayName"
           $apiSp = Ensure-ServicePrincipal -AppId $apiApp.appId
 
           $webApp = Ensure-AppRegistration -DisplayName $webDisplayName
@@ -306,7 +429,7 @@ jobs:
                 }
               )
             })
-          $webApp = az ad app show --id $webApp.appId --output json | ConvertFrom-Json
+          $webApp = Get-AppRegistrationByAppId -AppId $webApp.appId -Description "show app registration after web patch: $webDisplayName"
           $webSp = Ensure-ServicePrincipal -AppId $webApp.appId
 
           $graphApp = Ensure-AppRegistration -DisplayName $graphDisplayName
@@ -325,7 +448,7 @@ jobs:
                 }
               )
             })
-          $graphApp = az ad app show --id $graphApp.appId --output json | ConvertFrom-Json
+          $graphApp = Get-AppRegistrationByAppId -AppId $graphApp.appId -Description "show app registration after graph patch: $graphDisplayName"
           $graphSp = Ensure-ServicePrincipal -AppId $graphApp.appId
 
           $authApp = Ensure-AppRegistration -DisplayName $authDisplayName
@@ -346,7 +469,7 @@ jobs:
                 }
               )
             })
-          $authApp = az ad app show --id $authApp.appId --output json | ConvertFrom-Json
+          $authApp = Get-AppRegistrationByAppId -AppId $authApp.appId -Description "show app registration after auth patch: $authDisplayName"
           $authSp = Ensure-ServicePrincipal -AppId $authApp.appId
 
           $msGraphSp = az ad sp show --id $msGraphAppId --output json | ConvertFrom-Json
