@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "3238786922188504472"
+      "templateHash": "9462809217007910017"
     }
   },
   "parameters": {
@@ -104,9 +104,9 @@
     },
     "provisionEntraApps": {
       "type": "bool",
-      "defaultValue": true,
+      "defaultValue": false,
       "metadata": {
-        "description": "When true (default), Bicep provisions the four Entra app registrations via the\nMicrosoft Graph extension and uses their output appIds for app settings.\n\nWhen false, the *ClientId params below are used directly — preserving backward\ncompatibility for environments where app registrations already exist and should\nnot be modified by this deployment.\n"
+        "description": "When true, Bicep provisions the four Entra app registrations via the Microsoft\nGraph extension and uses their output appIds for app settings. This mode is\nretained only for backward compatibility; sub-scoped deployments authenticate to\nthe subscription tenant, so the Graph extension cannot target a separate ExtID\ntenant.\n\nWhen false (default), the *ClientId params below are used directly. CI/CD uses\nthis mode after the ExtID app registrations are provisioned by Azure CLI.\n"
       }
     }
   },

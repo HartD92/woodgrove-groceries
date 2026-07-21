@@ -19,10 +19,11 @@ param appServicePlanSku = 'P1v3'
 param tenantId = '<your-entra-external-id-tenant-id>'
 
 // --- Entra provisioning ---
-// Set to true (default) to let Bicep create/update the four Entra app
-// registrations via the Microsoft Graph extension.
-// Set to false to use the *ClientId params below without touching Entra.
-param provisionEntraApps = true
+// Default off: the Microsoft Graph Bicep extension provisions into the
+// deployment principal's tenant, which is the workforce subscription tenant for
+// sub-scoped deployments. CI/CD provisions CIAM apps separately in ExtID and
+// passes the resulting client IDs below.
+param provisionEntraApps = false
 
 // --- App registration Client IDs (used only when provisionEntraApps = false) ---
 // When provisionEntraApps = true, these are IGNORED; the IDs come from the
