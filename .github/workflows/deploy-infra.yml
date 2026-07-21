@@ -127,7 +127,50 @@ jobs:
             --output json | tee deploy-output.json
 
       # ------------------------------------------------------------------
-      # 6. Surface outputs as job summary
+      # 6. Post-deploy: create web app client secret via addPassword action
+      #    and store it directly in Key Vault.
+      #    Only runs when provisionEntraApps=true because otherwise the web
+      #    app registration already exists and its secret is already in KV.
+      # ------------------------------------------------------------------
+      - name: Create web client secret and seed Key Vault
+        if: env.PROVISION_ENTRA == 'true'
+        run: |
+          WEB_CLIENT_ID=$(python3 -c "
+          import json, sys
+          data = json.load(open('deploy-output.json'))
+          print(data['properties']['outputs']['resolvedWebClientId']['value'])
+          ")
+          KV_NAME=$(python3 -c "
+          import json, sys
+          data = json.load(open('deploy-output.json'))
+          print(data['properties']['outputs']['keyVaultName']['value'])
+          ")
+
+          echo "::add-mask::$WEB_CLIENT_ID"
+          echo "Generating client secret for app $WEB_CLIENT_ID"
+
+          # addPassword via az ad app credential reset --append
+          # --append preserves any existing credentials; --years 1 sets 1-year expiry
+          SECRET_JSON=$(az ad app credential reset \
+            --id "$WEB_CLIENT_ID" \
+            --append \
+            --display-name "cicd-managed-${ENV_NAME}" \
+            --years 1 \
+            --output json)
+
+          CLIENT_SECRET=$(echo "$SECRET_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['password'])")
+          echo "::add-mask::$CLIENT_SECRET"
+
+          az keyvault secret set \
+            --vault-name "$KV_NAME" \
+            --name web-client-secret \
+            --value "$CLIENT_SECRET" \
+            --output none
+
+          echo "✅ web-client-secret seeded into Key Vault $KV_NAME"
+
+      # ------------------------------------------------------------------
+      # 7. Surface outputs as job summary
       # ------------------------------------------------------------------
       - name: Summarise deployment outputs
         if: success()

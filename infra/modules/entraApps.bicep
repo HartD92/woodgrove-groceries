@@ -141,22 +141,18 @@ resource webApplication 'Microsoft.Graph/applications@v1.0' = {
       // ID tokens MUST be enabled for the confidential hybrid OIDC flow
       // David uses (SWA/App Service confidential hybrid).
       enableIdTokenIssuance: true
-      enableAccessTokenIssuance: false   // access tokens via hybrid not needed
+      enableAccessTokenIssuance: false
     }
   }
 
-  // Client secret placeholder — actual secret value must be retrieved from
-  // the Entra portal after deployment and seeded into Key Vault.
-  // VERIFY: endDateTime format must be ISO 8601 UTC.
-  passwordCredentials: [
-    {
-      displayName: 'deploy-managed-${environmentName}'
-      // 2-year expiry from a fixed epoch; update when rotating.
-      endDateTime: '2027-08-01T00:00:00Z'
-    }
-  ]
+  // NOTE: passwordCredentials is intentionally omitted.
+  // The Graph API rejects PUT/PATCH writes to passwordCredentials with:
+  //   "New password credentials must be generated using service actions."
+  // Secrets must be created via the addPassword POST action:
+  //   az ad app credential reset --id <appId> --append --display-name "..."
+  // The deploy workflow handles this automatically and pipes the value into
+  // Key Vault.  Ref: https://github.com/microsoftgraph/msgraph-bicep-types/issues/38
 
-  // Access the API app's delegated scope.
   requiredResourceAccess: [
     {
       resourceAppId: apiApplication.appId
@@ -172,18 +168,15 @@ resource webApplication 'Microsoft.Graph/applications@v1.0' = {
       resourceAppId: msGraphAppId
       resourceAccess: [
         {
-          // openid  — VERIFY: correct scope ID
-          id: '37f7f235-527c-4136-accd-4a02d197296e'
+          id: '37f7f235-527c-4136-accd-4a02d197296e'  // openid
           type: 'Scope'
         }
         {
-          // offline_access  — VERIFY: correct scope ID
-          id: '7427e0e9-2fba-42fe-b0c0-848c9e6a8182'
+          id: '7427e0e9-2fba-42fe-b0c0-848c9e6a8182'  // offline_access
           type: 'Scope'
         }
         {
-          // profile  — VERIFY: correct scope ID
-          id: '14dad69e-099b-42c9-810b-d002981feec1'
+          id: '14dad69e-099b-42c9-810b-d002981feec1'  // profile
           type: 'Scope'
         }
       ]

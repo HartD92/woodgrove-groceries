@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "2601831188561510842"
+      "templateHash": "3238786922188504472"
     }
   },
   "parameters": {
@@ -171,7 +171,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.45.15.27210",
-              "templateHash": "144008465917843918"
+              "templateHash": "2485550660016196174"
             }
           },
           "parameters": {
@@ -274,12 +274,6 @@
                     "enableAccessTokenIssuance": false
                   }
                 },
-                "passwordCredentials": [
-                  {
-                    "displayName": "[format('deploy-managed-{0}', parameters('environmentName'))]",
-                    "endDateTime": "2027-08-01T00:00:00Z"
-                  }
-                ],
                 "requiredResourceAccess": [
                   {
                     "resourceAppId": "[reference('apiApplication').appId]",

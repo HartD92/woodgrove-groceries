@@ -266,14 +266,23 @@ ACS_CONN=$(az communication list-key \
 az keyvault secret set --vault-name $KV_NAME \
   --name acs-connection-string --value "$ACS_CONN"
 
-# 3 — Web app client secret
-# After Bicep deploys the web app registration, go to:
-#   Entra portal → App registrations → woodgrove-groceries (dev) →
-#   Certificates & secrets → find the "deploy-managed-dev" credential.
-# The secret VALUE is shown only once at creation time in the portal.
-# Copy it here:
+# 3 — Web app client secret (automated via addPassword when provisionEntraApps=true)
+# When deploying via GitHub Actions the workflow creates the credential and
+# seeds it automatically.  For local/manual deploys run the same command:
+WEB_CLIENT_ID=$(az deployment sub show --name woodgrove-deploy-dev \
+  --query "properties.outputs.resolvedWebClientId.value" -o tsv)
+SECRET_JSON=$(az ad app credential reset \
+  --id "$WEB_CLIENT_ID" \
+  --append \
+  --display-name "cicd-managed-dev" \
+  --years 1 \
+  --output json)
 az keyvault secret set --vault-name $KV_NAME \
-  --name web-client-secret --value "<paste-client-secret>"
+  --name web-client-secret \
+  --value "$(echo $SECRET_JSON | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"password\"])')"
+# NOTE: --append preserves existing credentials; the secret value is only
+# returned once at creation time.  endDateTime (1-year expiry) is set by
+# the CLI, not by Bicep (passwordCredentials is a Bicep write restriction).
 
 # 4 — Cloudflare API token / secret
 az keyvault secret set --vault-name $KV_NAME \
