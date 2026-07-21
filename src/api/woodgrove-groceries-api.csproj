@@ -10,7 +10,6 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.Communication.Email" Version="1.1.0" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Logging.AzureAppServices" Version="10.0.10" />
     <PackageReference Include="Microsoft.Identity.Web" Version="3.14.1" />

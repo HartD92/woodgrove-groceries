@@ -10,12 +10,11 @@
 //      in v1.0 (or beta) as of August 2025.  The custom auth extension must be
 //      registered out-of-band after deployment.  See README § Custom Auth Ext.
 //
-//   2. Client secret value: The Bicep Graph extension creates the password
-//      credential metadata (displayName, expiry) but the SECRET VALUE is only
-//      returned by the Graph API at the moment of creation and cannot be
-//      retrieved later via IaC.  After deployment, retrieve the secret from
-//      the Entra portal (App registrations → Certificates & secrets) and seed
-//      it into Key Vault manually (same procedure as before).
+//   2. Client secret value: passwordCredentials is intentionally omitted from
+//      all app resources below — the Graph API rejects direct writes and
+//      requires the addPassword action instead.  The deploy workflow runs
+//      `az ad app credential reset --append` automatically and pipes the
+//      returned secret value into Key Vault.  No manual portal step required.
 //
 //   3. Admin consent for Graph app roles (graph-middleware): granting consent
 //      requires AppRoleAssignment.ReadWrite.All + DelegatedPermissionGrant.
