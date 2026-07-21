@@ -43,7 +43,7 @@
 
 <h2>Daily user activity over time</h2>
 <div class="text-center">
-  <div id="DailyActiveUsersSpinner" class="spinner-border woodgrove-spinner" role="status"></div>
+  <div id="DailyActiveUsersSpinner" class="spinner-border woodgrove-spinner" role="status"><span class="visually-hidden">Loading…</span></div>
 </div>
 <canvas id="DailyActiveUsersChart"></canvas>
 
@@ -60,7 +60,7 @@
   The graph below shows the monthly active users trend.
 
   <div class="text-center">
-    <div id="MonthlyActiveUsersSpinner" class="spinner-border woodgrove-spinner" role="status"></div>
+    <div id="MonthlyActiveUsersSpinner" class="spinner-border woodgrove-spinner" role="status"><span class="visually-hidden">Loading…</span></div>
   </div>
   <canvas id="MonthlyActiveUsersChart"></canvas>
 </div>
@@ -72,7 +72,7 @@
   effectiveness of the website in attracting and retaining new customers.
 
   <div class="text-center">
-    <div id="NewUsersSpinner" class="spinner-border woodgrove-spinner" role="status"></div>
+    <div id="NewUsersSpinner" class="spinner-border woodgrove-spinner" role="status"><span class="visually-hidden">Loading…</span></div>
   </div>
   <canvas id="NewUsersChart"></canvas>
 </div>
@@ -90,7 +90,7 @@ and so on.
 Refer to the detailed graphs for a breakdown.
 
 <div class="text-center">
-  <div id="RequestsSpinner" class="spinner-border woodgrove-spinner" role="status"></div>
+  <div id="RequestsSpinner" class="spinner-border woodgrove-spinner" role="status"><span class="visually-hidden">Loading…</span></div>
 </div>
 <canvas id="RequestsChart"></canvas>
 
@@ -100,7 +100,7 @@ Refer to the detailed graphs for a breakdown.
   The authentications per day provides you with insights for all daily user authentications.
 
   <div class="text-center">
-    <div id="MonthlyAuthenticationsSpinner" class="spinner-border woodgrove-spinner" role="status"></div>
+    <div id="MonthlyAuthenticationsSpinner" class="spinner-border woodgrove-spinner" role="status"><span class="visually-hidden">Loading…</span></div>
   </div>
   <canvas id="MonthlyAuthenticationsChart">
 
@@ -113,7 +113,7 @@ Refer to the detailed graphs for a breakdown.
   </div>
 
   <div class="text-center">
-    <div id="AuthenticationsPerCountrySpinner" class="spinner-border woodgrove-spinner" role="status"></div>
+    <div id="AuthenticationsPerCountrySpinner" class="spinner-border woodgrove-spinner" role="status"><span class="visually-hidden">Loading…</span></div>
   </div>
   <canvas id="AuthenticationsPerCountryChart"></canvas>
 
@@ -124,19 +124,15 @@ Refer to the detailed graphs for a breakdown.
   <h2>Operation systems of authentications</h2>
 
   <div class="text-center">
-    <div id="OperationSystemsOfAuthenticationRequestsSpinner" class="spinner-border woodgrove-spinner" role="status">
-    </div>
+    <div id="OperationSystemsOfAuthenticationRequestsSpinner" class="spinner-border woodgrove-spinner" role="status"><span class="visually-hidden">Loading…</span></div>
   </div>
   <canvas id="OperationSystemsOfAuthenticationRequestsChart"></canvas>
 </div>
 
 
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-
-
 @section Scripts {
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js" crossorigin="anonymous"><!-- TODO: add SRI hash --></script>
   <script>
 
     /***** Operation systems of authentication requests *****/

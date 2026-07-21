@@ -1,4 +1,4 @@
-﻿@page
+@page
 @model MyApp.Namespace.ProfileModel
 @{
 }
@@ -7,7 +7,7 @@
 
 
 <style>
-    .form-group {
+    .mb-3 {
         margin-top: 10px;
     }
 </style>
@@ -56,52 +56,53 @@
         <div id="userAttributeContainer" class="hideIfNoAuthenticated">
             <h2 class="profile-header">Edit your profile</h2>
 
-            <div id="editProfileSpinner" class="text-left profile-content">
+            <div id="editProfileSpinner" class="text-start profile-content">
 
                 <br>Loading... <br>
                 <div class="spinner-border m-5 text-warning" style="width: 3rem; height: 3rem;" role="status">
 
+                <span class="visually-hidden">Loading…</span>
                 </div>
             </div>
 
-            <div class="text-left profile-content" id="editProfileSection" style="display: none;">
-                <div class="form-group row">
+            <div class="text-start profile-content" id="editProfileSection" style="display: none;">
+                <div class="mb-3 row">
                     <label for="inputDisplayName" class="col-sm-2 col-form-label">Display name</label>
                     <div class="col-sm-5">
                         <input type="text" class="form-control" id="inputDisplayName" required>
                     </div>
                 </div>
-                <div class="form-group row">
+                <div class="mb-3 row">
                     <label for="inputGivenName" class="col-sm-2 col-form-label">Given name</label>
                     <div class="col-sm-5">
                         <input type="text" class="form-control" id="inputGivenName">
                     </div>
                 </div>
-                <div class="form-group row">
+                <div class="mb-3 row">
                     <label for="inputSurname" class="col-sm-2 col-form-label">Surname</label>
                     <div class="col-sm-5">
                         <input type="text" class="form-control" id="inputSurname">
                     </div>
                 </div>
-                <div class="form-group row">
+                <div class="mb-3 row">
                     <label for="inputCountry" class="col-sm-2 col-form-label">Country</label>
                     <div class="col-sm-5">
                         <input type="text" class="form-control" id="inputCountry">
                     </div>
                 </div>
-                <div class="form-group row">
+                <div class="mb-3 row">
                     <label for="inputCity" class="col-sm-2 col-form-label">City</label>
                     <div class="col-sm-5">
                         <input type="text" class="form-control" id="inputCity">
                     </div>
                 </div>
-                <div class="form-group row">
+                <div class="mb-3 row">
                     <label for="inputSpecialDiet" class="col-sm-2 col-form-label">Special diet</label>
                     <div class="col-sm-5">
                         <input type="text" class="form-control" id="inputSpecialDiet">
                     </div>
                 </div>
-                <div class="form-group row" style="padding-bottom: 10px; padding-top: 10px;">
+                <div class="mb-3 row" style="padding-bottom: 10px; padding-top: 10px;">
                     <div class="col-sm-12">
                         <button type="button" onclick="updateUserAttributes()" class="btn header-button mfaFulfilled"
                             style="margin-right: 20px;" id="editProfileButton">
@@ -132,11 +133,12 @@
             <h2 style="color: green; padding-bottom: 15px; padding-top: 55px;">Your Woodgrove app roles and security groups
             </h2>
 
-            <div id="rolesSpinner" class="text-left profile-content">
+            <div id="rolesSpinner" class="text-start profile-content">
 
                 <br>Loading... <br>
                 <div class="spinner-border m-5 text-warning" style="width: 3rem; height: 3rem;" role="status">
 
+                <span class="visually-hidden">Loading…</span>
                 </div>
             </div>
 
@@ -146,7 +148,7 @@
                 the roles and add yourself to the security groups when you need its privileges. For this online demo, your
                 request will be automatically approved.
                 <form method="post">
-                    <div class="form-group">
+                    <div class="mb-3">
                         <h4 style="color: green; padding-bottom: 5px;">Security groups</h4>
                         <div class="form-check">
                             <input type="checkbox" value="true" class="form-check-input" name="MemberOfCommercialAccounts"
@@ -155,7 +157,7 @@
                                 group. Members of this group get a special discount.</label>
                         </div>
                     </div>
-                    <div class="form-group">
+                    <div class="mb-3">
                         <h4 style="color: green; padding-bottom: 5px; padding-top: 10px;">Application roles</h4>
                         <div class="form-check">
                             <input type="checkbox" value="true" class="form-check-input" name="HasProductsContributorRole"
@@ -173,7 +175,7 @@
                                 role. Grant you access to manage online orders.</label>
                         </div>
                     </div>
-                    <div class="form-group" style="padding-top: 15px;">
+                    <div class="mb-3" style="padding-top: 15px;">
                         <button type="button" id="rolesButton" class="btn header-button" asp-page-handler="Roles"
                             onclick="updateUserRoles()">
 
@@ -190,16 +192,17 @@
         <div id="singInContainer" class="hideIfNoAuthenticated">
             <h2 class="profile-header">Sign-in name</h2>
 
-            <div id="singInSpinner" class="text-left profile-content">
+            <div id="singInSpinner" class="text-start profile-content">
                 <br>Loading... <br>
                 <div class="spinner-border m-5 text-warning" style="width: 3rem; height: 3rem;" role="status">
 
+                <span class="visually-hidden">Loading…</span>
                 </div>
             </div>
 
-            <div class="text-left profile-content" id="singInSection" style="display: none;">
+            <div class="text-start profile-content" id="singInSection" style="display: none;">
 
-                <div class="form-group row">
+                <div class="mb-3 row">
                     <label for="inputSignInEmail" class="col-sm-2 col-form-label">Email</label>
                     <div class="col-sm-5">
                         <input type="text" class="form-control" id="inputSignInEmail">
@@ -213,7 +216,7 @@
                 </div>
 
 
-                <div class="form-group row" style="padding-bottom: 10px; padding-top: 10px;">
+                <div class="mb-3 row" style="padding-bottom: 10px; padding-top: 10px;">
                     <div class="col-sm-12">
                         <button type="button" class="btn header-button mfaRequiredButton" style="margin-right: 20px;"
                             data-bs-toggle="modal" data-bs-target="#mfaAlert">
@@ -222,7 +225,7 @@
                     </div>
                 </div>
 
-                <div class="form-group row">
+                <div class="mb-3 row">
 
                 </div>
 
@@ -232,19 +235,20 @@
         <div id="mfaContainer" class="hideIfNoAuthenticated">
             <h2 class="profile-header">Multi factor authentication</h2>
 
-            <div id="mfaSpinner" class="text-left profile-content">
+            <div id="mfaSpinner" class="text-start profile-content">
                 <br>Loading... <br>
                 <div class="spinner-border m-5 text-warning" style="width: 3rem; height: 3rem;" role="status">
 
+                <span class="visually-hidden">Loading…</span>
                 </div>
             </div>
 
-            <div class="text-left profile-content" id="mfaSection" style="display: none;">
+            <div class="text-start profile-content" id="mfaSection" style="display: none;">
                 <p>
                     Your multi-factor authentication methods:
                 </p>
 
-                <div class="form-group row">
+                <div class="mb-3 row">
                     <label for="inputEmailMfa" class="col-sm-2 col-form-label">Email</label>
                     <div class="col-sm-5">
                         <input type="text" class="form-control" id="inputEmailMfa">
@@ -257,7 +261,7 @@
                     </div>
                 </div>
 
-                <div class="form-group row">
+                <div class="mb-3 row">
                     <label for="inputPhoneNumber" class="col-sm-2 col-form-label">Phone</label>
                     <div class="col-sm-5">
                         <input type="text" class="form-control" id="inputPhoneNumber">
@@ -272,7 +276,7 @@
                 </div>
 
 
-                <div class="form-group row" style="padding-bottom: 10px; padding-top: 10px;">
+                <div class="mb-3 row" style="padding-bottom: 10px; padding-top: 10px;">
                     <div class="col-sm-12">
                         <button type="button" class="btn header-button mfaRequiredButton" style="margin-right: 20px;"
                             data-bs-toggle="modal" data-bs-target="#mfaAlert">
@@ -356,11 +360,12 @@
             </div>
             <div class="modal-body">
 
-                <div id="verificationSpinner" class="text-left">
+                <div id="verificationSpinner" class="text-start">
                     <br>Please wait... <br>
                     <div class="spinner-border m-5 text-warning" style="width: 3rem; height: 3rem;" role="status">
 
-                    </div>
+                    <span class="visually-hidden">Loading…</span>
+                </div>
                 </div>
 
                 <div id="verificationContainer">

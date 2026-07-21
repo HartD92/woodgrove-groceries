@@ -78,7 +78,7 @@
 <!-- #region  Filters -->
 <div class="row mb-4" style="padding-top: 35px;">
     <div class="col">
-        <div class="font-weight-bold h4" style="letter-spacing: 1px;">
+        <div class="fw-bold h4" style="letter-spacing: 1px;">
             <strong>Get in the groove for shopping</strong>
         </div>
     </div>
@@ -126,10 +126,10 @@
                     @* Check if the Model.Allergy is not empty. If not, check whether the product contains the Model.Allergy *@
                     @if (!string.IsNullOrEmpty(Model.Allergy) && product.AllergyInfo.Contains(Model.Allergy, StringComparer.OrdinalIgnoreCase))
                     {
-                        <div class="card-allergy" role="button" data-toggle="popover" data-trigger="hover"
+                        <button type="button" class="card-allergy" data-bs-toggle="popover" data-bs-trigger="hover focus"
                             title="@Model.Allergy allergy warning">
                             <i class="bi bi-exclamation-triangle-fill"></i>
-                        </div>
+                        </button>
                     }
 
                     <div class="card-title">@product.Name</div>
@@ -188,16 +188,17 @@
 @section Waves {
     <!--Waves Container-->
     <div id="waves">
-        <svg class="waves" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
-            viewBox="0 24 150 28" preserveAspectRatio="none" shape-rendering="auto">
+        <svg class="waves" xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 24 150 28" preserveAspectRatio="none" shape-rendering="auto"
+            aria-hidden="true" focusable="false">
             <defs>
                 <path id="gentle-wave" d="M-160 44c30 0 58-18 88-18s 58 18 88 18 58-18 88-18 58 18 88 18 v44h-352z" />
             </defs>
             <g class="parallax">
-                <use xlink:href="#gentle-wave" x="48" y="0" fill="rgba(255,255,255,0.7" />
-                <use xlink:href="#gentle-wave" x="48" y="3" fill="rgba(255,255,255,0.5)" />
-                <use xlink:href="#gentle-wave" x="48" y="5" fill="rgba(255,255,255,0.3)" />
-                <use xlink:href="#gentle-wave" x="48" y="7" fill="#fff" />
+                <use href="#gentle-wave" x="48" y="0" fill="rgba(255,255,255,0.7)" />
+                <use href="#gentle-wave" x="48" y="3" fill="rgba(255,255,255,0.5)" />
+                <use href="#gentle-wave" x="48" y="5" fill="rgba(255,255,255,0.3)" />
+                <use href="#gentle-wave" x="48" y="7" fill="#fff" />
             </g>
         </svg>
     </div>

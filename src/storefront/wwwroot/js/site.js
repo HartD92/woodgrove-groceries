@@ -22,7 +22,13 @@ function showPowerShell() {
 var stepper
 $(document).ready(function () {
 
-    $('.feedback').popover({ placement: "top", trigger: "hover", content: "Foud a bug or have a question? Want to provide feedback? Click on this button and raise an issue on GitHub." });
+    document.querySelectorAll('.feedback').forEach(function(el) {
+        new bootstrap.Popover(el, {
+            placement: 'top',
+            trigger: 'hover focus',
+            content: 'Found a bug or have a question? Want to provide feedback? Click on this button and raise an issue on GitHub.'
+        });
+    });
 
 
     if ($('.pop').length > 0) {
