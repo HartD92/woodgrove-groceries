@@ -17,17 +17,17 @@ public class UserInsightsController : ControllerBase
     private const string baseUrl = "https://graph.microsoft.com/beta/reports/userinsights";
     private readonly IConfiguration _configuration;
 
-    private static readonly HttpClient client = new HttpClient();
-
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<UserInsightsController> _logger;
     private readonly IMemoryCache _memoryCache;
 
 
-    public UserInsightsController(ILogger<UserInsightsController> logger, IConfiguration configuration, IMemoryCache memoryCache)
+    public UserInsightsController(ILogger<UserInsightsController> logger, IConfiguration configuration, IMemoryCache memoryCache, IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
         _configuration = configuration;
         _memoryCache = memoryCache;
+        _httpClientFactory = httpClientFactory;
     }
 
 
@@ -41,6 +41,7 @@ public class UserInsightsController : ControllerBase
         string? responseString;
         if (!_memoryCache.TryGetValue(Url, out responseString))
         {
+            var client = _httpClientFactory.CreateClient();
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await MsalAccessTokenHandler.AcquireToken(this._configuration));
 
             var response = await client.GetAsync(Url);

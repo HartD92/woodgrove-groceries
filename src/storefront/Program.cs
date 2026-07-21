@@ -13,7 +13,10 @@ builder.Services.AddControllersWithViews();
 
 // The following line enables Application Insights telemetry collection.
 builder.Services.AddApplicationInsightsTelemetry();
-var _telemetry = builder.Services.BuildServiceProvider().GetService<TelemetryClient>();
+
+// _telemetry is resolved after app.Build() to avoid the BuildServiceProvider anti-pattern.
+// Local event handlers below capture it by reference and are only invoked after app.Run().
+TelemetryClient? _telemetry = null;
 
 // Initialize the demo data
 DemoDataList.Initialize(builder.Configuration);
@@ -103,41 +106,6 @@ foreach (var scheme in AuthScheme.All)
 }
 
 
-builder.Services.AddAuthentication();
-
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultScheme = OpenIdConnectDefaults.AuthenticationScheme; //"DynamicAuth";
-});
-// .AddPolicyScheme("DynamicAuth", "Automatically Select Scheme", options =>
-// {
-//     options.ForwardDefaultSelector = context =>
-//     {
-//         string scheme = OpenIdConnectDefaults.AuthenticationScheme;
-
-//         // Check the scheme from the cookies (if exists)
-//         // This check is required for the sign-in postback and sign-out flows
-//         foreach (var item in context.Request.Cookies)
-//         {
-//             if (item.Key == ".AspNetCore.ArkoseFraudProtectioncookies")
-//             {
-//                 scheme = AuthScheme.ArkoseFraudProtection;
-//                 break;
-//             }
-//         }
-
-//         string? handler = context.Request.Query["handler"];
-
-//         // Force change the scheme of explicitly requested by the sign-in
-//         if (handler != null && handler == AuthScheme.ArkoseFraudProtection)
-//         {
-//             scheme = handler;
-//         }
-
-//         return scheme;
-//     };
-// });
-
 builder.Services.AddAuthorization(options =>
 {
 
@@ -171,7 +139,12 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddRazorPages()
     .AddMicrosoftIdentityUI();
 
+builder.Services.AddHttpClient();
+
 var app = builder.Build();
+
+// Resolve TelemetryClient from the built DI container (avoids BuildServiceProvider anti-pattern)
+_telemetry = app.Services.GetService<TelemetryClient>();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
