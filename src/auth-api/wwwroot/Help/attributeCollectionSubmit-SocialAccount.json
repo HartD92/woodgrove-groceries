@@ -1,0 +1,60 @@
+{
+    "type": "microsoft.graph.authenticationEvent.attributeCollectionSubmit",
+    "source": "/tenants/12345678-0000-0000-0000-000000000000/applications/00000003-0000-0000-0000-000000000000",
+    "data": {
+        "@odata.type": "microsoft.graph.onAttributeCollectionSubmitCalloutData",
+        "userSignUpInfo": {
+            "attributes": {
+                "email": {
+                    "value": "someone@gmail.com",
+                    "@odata.type": "microsoft.graph.stringDirectoryAttributeValue",
+                    "attributeType": "builtIn"
+                },
+                "city": {
+                    "value": "Sydney",
+                    "@odata.type": "microsoft.graph.stringDirectoryAttributeValue",
+                    "attributeType": "builtIn"
+                },
+                "country": {
+                    "value": "au",
+                    "@odata.type": "microsoft.graph.stringDirectoryAttributeValue",
+                    "attributeType": "builtIn"
+                },
+                "displayName": {
+                    "value": "Emily",
+                    "@odata.type": "microsoft.graph.stringDirectoryAttributeValue",
+                    "attributeType": "builtIn"
+                },
+                "extension_9ce7f42908d14395aed7c48e9b6b957f_SpecialDiet": {
+                    "value": "Eggs",
+                    "@odata.type": "microsoft.graph.stringDirectoryAttributeValue",
+                    "attributeType": "directorySchemaExtension"
+                }
+            }
+        },
+        "tenantId": "12345678-0000-0000-0000-000000000000",
+        "authenticationEventListenerId": "55555555-2222-0000-0000-000000000000",
+        "customAuthenticationExtensionId": "66666666-2222-0000-0000-000000000000",
+        "authenticationContext": {
+            "correlationId": "61154773-72eb-497e-a826-11250395836a",
+            "client": {
+                "ip": "2a0d:0000:0000:0000:0000:0000:e02d:78d3",
+                "locale": "en-us",
+                "market": "en-us"
+            },
+            "protocol": "OAUTH2.0",
+            "clientServicePrincipal": {
+                "id": "33333333-0000-0000-0000-000000000000",
+                "appId": "44444444-0000-0000-0000-000000000000",
+                "appDisplayName": "My Test application",
+                "displayName": "My Test application"
+            },
+            "resourceServicePrincipal": {
+                "id": "e42d06a3-38f6-40ab-86a8-3019e1468863",
+                "appId": "00000003-0000-0000-0000-000000000000",
+                "appDisplayName": "Microsoft Graph",
+                "displayName": "Microsoft Graph"
+            }
+        }
+    }
+}
