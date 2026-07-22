@@ -498,6 +498,8 @@ jobs:
       API_CLIENT_ID: ${{ needs.entra-provision.outputs.api_client_id }}
       GRAPH_CLIENT_ID: ${{ needs.entra-provision.outputs.graph_client_id }}
       AUTH_CLIENT_ID: ${{ needs.entra-provision.outputs.auth_client_id }}
+      ENTRA_TENANT_ID: ${{ vars.ENTRA_TENANT_ID }}
+      CIAM_SUBDOMAIN: ${{ vars.ENTRA_CIAM_SUBDOMAIN }}
 
     steps:
       - name: Checkout repository
@@ -534,7 +536,10 @@ jobs:
                          webClientId=$env:WEB_CLIENT_ID `
                          apiClientId=$env:API_CLIENT_ID `
                          graphClientId=$env:GRAPH_CLIENT_ID `
-                         authClientId=$env:AUTH_CLIENT_ID
+                         authClientId=$env:AUTH_CLIENT_ID `
+                         tenantId=$env:ENTRA_TENANT_ID `
+                         entraAuthorityUrl="https://$($env:CIAM_SUBDOMAIN).ciamlogin.com/$($env:ENTRA_TENANT_ID)/v2.0" `
+                         webDomain="$($env:CIAM_SUBDOMAIN).onmicrosoft.com"
 
       - name: Deploy infrastructure
         shell: pwsh
@@ -551,6 +556,9 @@ jobs:
                          apiClientId=$env:API_CLIENT_ID `
                          graphClientId=$env:GRAPH_CLIENT_ID `
                          authClientId=$env:AUTH_CLIENT_ID `
+                         tenantId=$env:ENTRA_TENANT_ID `
+                         entraAuthorityUrl="https://$($env:CIAM_SUBDOMAIN).ciamlogin.com/$($env:ENTRA_TENANT_ID)/v2.0" `
+                         webDomain="$($env:CIAM_SUBDOMAIN).onmicrosoft.com" `
             --output json | Tee-Object -FilePath deploy-output.json | Out-Null
 
       - name: Azure login to ExtID tenant for redirect URI sync
