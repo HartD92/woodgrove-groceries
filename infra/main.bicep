@@ -75,6 +75,9 @@ param appRolesCommercialGroup string = ''
 @description('ObjectId of the Woodgrove Exclusive Demos security group in the ExtID tenant')
 param appRolesExclusiveDemosGroup string = ''
 
+@description('App registration client ID — woodgrove-groceries-payment-api (downstream Payment API for OBO)')
+param paymentApiClientId string = ''
+
 @description('Additional tags applied to all resources')
 param tags object = {}
 
@@ -158,6 +161,7 @@ var resolvedWebClientId   = provisionEntraApps ? (entraApps.outputs.webClientId 
 var resolvedApiClientId   = provisionEntraApps ? (entraApps.outputs.apiClientId   ?? '') : apiClientId
 var resolvedGraphClientId = provisionEntraApps ? (entraApps.outputs.graphClientId ?? '') : graphClientId
 var resolvedAuthClientId  = provisionEntraApps ? (entraApps.outputs.authClientId  ?? '') : authClientId
+var resolvedPaymentApiClientId = provisionEntraApps ? (entraApps.outputs.paymentApiClientId ?? '') : paymentApiClientId
 
 // ============================================================
 // KEY VAULT SECRET REFERENCES
@@ -168,6 +172,7 @@ var resolvedAuthClientId  = provisionEntraApps ? (entraApps.outputs.authClientId
 var kvRefAppInsights  = '@Microsoft.KeyVault(SecretUri=${kvBaseUri}secrets/appinsights-connection-string/)'
 var kvRefAcsConn      = '@Microsoft.KeyVault(SecretUri=${kvBaseUri}secrets/acs-connection-string/)'
 var kvRefWebSecret    = '@Microsoft.KeyVault(SecretUri=${kvBaseUri}secrets/web-client-secret/)'
+var kvRefApiSecret    = '@Microsoft.KeyVault(SecretUri=${kvBaseUri}secrets/api-client-secret/)'
 var kvRefGraphSecret  = '@Microsoft.KeyVault(SecretUri=${kvBaseUri}secrets/graph-client-secret/)'
 var kvRefCloudflare   = '@Microsoft.KeyVault(SecretUri=${kvBaseUri}secrets/cloudflare-api-secret/)'
 
@@ -274,6 +279,9 @@ module apiApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__TenantId',                            value: tenantId }
       { name: 'AzureAd__ClientId',                            value: resolvedApiClientId }
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
+      { name: 'AzureAd__ClientCredentials__0__SourceType',     value: 'ClientSecret' }
+      { name: 'AzureAd__ClientCredentials__0__ClientSecret',   value: kvRefApiSecret }
+      { name: 'WoodgroveGroceriesDownstreamApi__BaseUrl',      value: 'api://${resolvedPaymentApiClientId}' }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING',         value: kvRefAppInsights }
       { name: 'AzureCommunicationServices__ConnectionString',  value: kvRefAcsConn }
     ]
@@ -385,3 +393,4 @@ output resolvedWebClientId   string = resolvedWebClientId
 output resolvedApiClientId   string = resolvedApiClientId
 output resolvedGraphClientId string = resolvedGraphClientId
 output resolvedAuthClientId  string = resolvedAuthClientId
+output resolvedPaymentApiClientId string = resolvedPaymentApiClientId
