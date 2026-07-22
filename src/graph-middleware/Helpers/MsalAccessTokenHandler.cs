@@ -1,13 +1,10 @@
 ﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Identity.Client;
 using Microsoft.Identity.Web;
-using Microsoft.Extensions.DependencyInjection;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading;
 using System.Threading.Tasks;
 using System;
-using Microsoft.Extensions.Logging;
-using System.Drawing;
-using Microsoft.Extensions.Caching.Memory;
+using Azure.Core;
 using Azure.Identity;
 using Microsoft.Graph;
 
@@ -39,25 +36,12 @@ namespace woodgrovedemo.Helpers
 
         public static  GraphServiceClient GetGraphClient(IConfiguration configuration, string[]? scopes = null)
         {
-            string? tenantId = configuration.GetSection("AzureAd:TenantId").Value;
-            string? clientId = configuration.GetSection("AzureAd:ClientId").Value;
-            string? certificateThumbprint = configuration.GetSection("AzureAd:ClientCertificates:0:CertificateThumbprint").Value;
-
-            if (string.IsNullOrWhiteSpace(certificateThumbprint))
-            {
-                throw new ArgumentNullException(nameof(certificateThumbprint), "Certificate thumbprint cannot be null or empty.");
-            }
-            
-            X509Certificate2 certificate = ReadCertificate(certificateThumbprint);
-
-            var clientCertificateCredential = new ClientCertificateCredential(tenantId, clientId, certificate);
-
             if (scopes == null)
             {
                 scopes = new string[] { "https://graph.microsoft.com/.default" };
             }
 
-            var graphClient = new GraphServiceClient(clientCertificateCredential, scopes);
+            var graphClient = new GraphServiceClient(CreateGraphCredential(configuration), scopes);
 
             return graphClient;
         }
@@ -74,60 +58,75 @@ namespace woodgrovedemo.Helpers
             return accessToken.Item1;
         }
 
-        public static async Task<(string token, string error, string error_description)> GetAccessToken(IConfiguration configuration, string[] scopes = null)
+        public static async Task<(string token, string error, string error_description)> GetAccessToken(IConfiguration configuration, string[]? scopes = null)
         {
-            string? tenantId = configuration.GetSection("AzureAd:TenantId").Value;
-            string? clientId = configuration.GetSection("AzureAd:ClientId").Value;
-            string? certificateThumbprint = configuration.GetSection("AzureAd:ClientCertificates:0:CertificateThumbprint").Value;
-
-            // You can run this sample using Certificate. The code will differ only when instantiating the IConfidentialClientApplication
-            //string authority = $"{configuration.GetSection("MicrosoftGraph:TenantId").Value!}{configuration.GetSection("MicrosoftGraph:TenantId").Value!}";
-
-            // Since we are using application permissions this will be a confidential client application
-            X509Certificate2 certificate = ReadCertificate(certificateThumbprint);
-            IConfidentialClientApplication app = ConfidentialClientApplicationBuilder.Create(clientId)
-                .WithCertificate(certificate)
-                .WithTenantId(tenantId)
-                .Build();
-
-            //configure in memory cache for the access tokens. The tokens are typically valid for 60 seconds,
-            //so no need to create new ones for every web request
-            app.AddDistributedTokenCache(services =>
-            {
-                services.AddDistributedMemoryCache();
-                services.AddLogging(configure => configure.AddConsole())
-                .Configure<LoggerFilterOptions>(options => options.MinLevel = Microsoft.Extensions.Logging.LogLevel.Debug);
-            });
-
-            // With client credentials flows the scopes is ALWAYS of the shape "resource/.default", as the 
-            // application permissions need to be set statically (in the portal or by PowerShell), and then granted by
-            // a tenant administrator.  
             if (scopes == null)
             {
                 scopes = new string[] { "https://graph.microsoft.com/.default" };
             }
 
-            AuthenticationResult result = null;
             try
             {
-                result = await app.AcquireTokenForClient(scopes)
-                    .ExecuteAsync();
+                AccessToken result = await CreateGraphCredential(configuration).GetTokenAsync(
+                    new TokenRequestContext(scopes),
+                    CancellationToken.None);
+
+                return (result.Token, String.Empty, String.Empty);
             }
-            catch (MsalServiceException ex) when (ex.Message.Contains("AADSTS70011"))
+            catch (Exception ex)
             {
-                // Invalid scope. The scope has to be of the form "https://resourceurl/.default"
-                // Mitigation: change the scope to be as expected
-                return (string.Empty, "500", "Scope provided is not supported");
-                //return BadRequest(new { error = "500", error_description = "Scope provided is not supported" });
-            }
-            catch (MsalServiceException ex)
-            {
-                // general error getting an access token
                 return (String.Empty, "500", "Something went wrong getting an access token for the client API:" + ex.Message);
-                //return BadRequest(new { error = "500", error_description = "Something went wrong getting an access token for the client API:" + ex.Message });
+            }
+        }
+
+        private static TokenCredential CreateGraphCredential(IConfiguration configuration)
+        {
+            string? tenantId = GetConfiguredValue(
+                configuration.GetSection("MicrosoftGraph:TenantId").Value,
+                configuration.GetSection("AzureAd:TenantId").Value);
+            string? clientId = GetConfiguredValue(
+                configuration.GetSection("MicrosoftGraph:ClientId").Value,
+                configuration.GetSection("AzureAd:ClientId").Value);
+            string? clientSecret = GetConfiguredValue(configuration.GetSection("MicrosoftGraph:ClientSecret").Value);
+
+            if (string.IsNullOrWhiteSpace(tenantId))
+            {
+                throw new ArgumentNullException(nameof(tenantId), "MicrosoftGraph:TenantId or AzureAd:TenantId cannot be null or empty.");
             }
 
-            return (result.AccessToken, String.Empty, String.Empty);
+            if (string.IsNullOrWhiteSpace(clientId))
+            {
+                throw new ArgumentNullException(nameof(clientId), "MicrosoftGraph:ClientId or AzureAd:ClientId cannot be null or empty.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(clientSecret))
+            {
+                return new ClientSecretCredential(tenantId, clientId, clientSecret);
+            }
+
+            string? certificateThumbprint = GetConfiguredValue(
+                configuration.GetSection("MicrosoftGraph:CertificateThumbprint").Value,
+                configuration.GetSection("AzureAd:ClientCertificates:0:CertificateThumbprint").Value);
+            if (string.IsNullOrWhiteSpace(certificateThumbprint))
+            {
+                throw new ArgumentNullException(nameof(certificateThumbprint), "Configure MicrosoftGraph:ClientSecret or a certificate thumbprint.");
+            }
+
+            X509Certificate2 certificate = ReadCertificate(certificateThumbprint);
+            return new ClientCertificateCredential(tenantId, clientId, certificate);
+        }
+
+        private static string? GetConfiguredValue(params string?[] values)
+        {
+            foreach (string? value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value) && !value.StartsWith("<", StringComparison.Ordinal))
+                {
+                    return value;
+                }
+            }
+
+            return null;
         }
 
     }

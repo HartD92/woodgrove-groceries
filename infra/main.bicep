@@ -153,6 +153,7 @@ var resolvedAuthClientId  = provisionEntraApps ? (entraApps.outputs.authClientId
 var kvRefAppInsights  = '@Microsoft.KeyVault(SecretUri=${kvBaseUri}secrets/appinsights-connection-string/)'
 var kvRefAcsConn      = '@Microsoft.KeyVault(SecretUri=${kvBaseUri}secrets/acs-connection-string/)'
 var kvRefWebSecret    = '@Microsoft.KeyVault(SecretUri=${kvBaseUri}secrets/web-client-secret/)'
+var kvRefGraphSecret  = '@Microsoft.KeyVault(SecretUri=${kvBaseUri}secrets/graph-client-secret/)'
 var kvRefCloudflare   = '@Microsoft.KeyVault(SecretUri=${kvBaseUri}secrets/cloudflare-api-secret/)'
 
 // ============================================================
@@ -220,6 +221,9 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
       { name: 'AzureAd__ClientCredentials__0__SourceType',     value: 'ClientSecret' }
       { name: 'AzureAd__ClientCredentials__0__ClientSecret',   value: kvRefWebSecret }
+      { name: 'MicrosoftGraph__TenantId',                      value: tenantId }
+      { name: 'MicrosoftGraph__ClientId',                      value: resolvedWebClientId }
+      { name: 'MicrosoftGraph__ClientSecret',                  value: kvRefWebSecret }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING',         value: kvRefAppInsights }
       { name: 'WoodgroveGroceriesApi__BaseUrl',                value: 'api://woodgrove-groceries-api-${environmentName}' }
       { name: 'WoodgroveGroceriesApi__Scopes__0',              value: 'access_as_user' }
@@ -271,6 +275,9 @@ module graphApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__TenantId',          value: tenantId }
       { name: 'AzureAd__ClientId',          value: resolvedGraphClientId }
       { name: 'AzureAd__Authority',         value: entraAuthorityUrl }
+      { name: 'MicrosoftGraph__TenantId',   value: tenantId }
+      { name: 'MicrosoftGraph__ClientId',   value: resolvedGraphClientId }
+      { name: 'MicrosoftGraph__ClientSecret', value: kvRefGraphSecret }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: kvRefAppInsights }
     ]
   }
