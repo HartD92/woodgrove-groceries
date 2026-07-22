@@ -60,6 +60,21 @@ param websiteLoadCertificates string = '*'
 @description('ACS data residency location')
 param acsDataLocation string = 'United States'
 
+@description('Service principal objectId of the web app registration in the ExtID tenant (AppRoles:PrincipalId — ResourceId for app role assignments)')
+param appRolesPrincipalId string = ''
+
+@description('App role id for the Orders.Manager role defined on the web app registration')
+param appRolesOrdersManager string = ''
+
+@description('App role id for the Products.Contributor role defined on the web app registration')
+param appRolesProductsContributor string = ''
+
+@description('ObjectId of the Woodgrove Commercial Accounts security group in the ExtID tenant')
+param appRolesCommercialGroup string = ''
+
+@description('ObjectId of the Woodgrove Exclusive Demos security group in the ExtID tenant')
+param appRolesExclusiveDemosGroup string = ''
+
 @description('Additional tags applied to all resources')
 param tags object = {}
 
@@ -235,6 +250,11 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'AzureCommunicationServices__ConnectionString',  value: kvRefAcsConn }
       { name: 'Cloudflare__ZoneId',                            value: cloudflareZoneId }
       { name: 'Cloudflare__ApiSecret',                         value: kvRefCloudflare }
+      { name: 'AppRoles__PrincipalId',                         value: appRolesPrincipalId }
+      { name: 'AppRoles__OrdersManager',                       value: appRolesOrdersManager }
+      { name: 'AppRoles__ProductsContributor',                 value: appRolesProductsContributor }
+      { name: 'AppRoles__CommercialAccountsSecurityGroup',     value: appRolesCommercialGroup }
+      { name: 'AppRoles__ExclusiveDemosSecurityGroup',         value: appRolesExclusiveDemosGroup }
     ]
   }
 }
