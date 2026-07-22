@@ -89,6 +89,10 @@ jobs:
           $graphOfflineAccessScopeId = '7427e0e9-2fba-42fe-b0c0-848c9e6a8182'
           $graphProfileScopeId = '14dad69e-099b-42c9-810b-d002981feec1'
           $graphUserReadScopeId = 'e1fe6dd8-ba31-4d61-89e7-88639da4683d'
+          $graphAuditLogReadAllRoleId = 'b0afded3-3588-46d8-8b3d-9842eff778da'
+          $graphAppRoleAssignmentReadWriteAllRoleId = '06b708a9-e830-4db3-a914-8e69da51d44f'
+          $graphUserAuthenticationMethodReadAllRoleId = '38d9df27-64da-44fd-b7c5-a6fbac20248f'
+          $graphUserAuthenticationMethodReadWriteAllRoleId = '50483e42-d915-4231-9639-7fdb7fd190e5'
           $graphUserReadWriteAllRoleId = '741f803b-c850-494e-b5df-cde7c675a1ca'
           $graphGroupReadWriteAllRoleId = '62a82d76-70ea-41e2-9197-370581804d09'
           $graphDirectoryReadWriteAllRoleId = '19dbc75e-c2e2-444c-a770-ec69d8559fc7'
@@ -434,6 +438,10 @@ jobs:
                     [ordered]@{ id = $graphUserReadWriteAllRoleId; type = 'Role' }
                     [ordered]@{ id = $graphGroupReadWriteAllRoleId; type = 'Role' }
                     [ordered]@{ id = $graphDirectoryReadWriteAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphAuditLogReadAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphAppRoleAssignmentReadWriteAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphUserAuthenticationMethodReadAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphUserAuthenticationMethodReadWriteAllRoleId; type = 'Role' }
                   )
                 }
               )
@@ -469,6 +477,12 @@ jobs:
                     [ordered]@{ id = $graphOfflineAccessScopeId; type = 'Scope' }
                     [ordered]@{ id = $graphProfileScopeId; type = 'Scope' }
                     [ordered]@{ id = $graphUserReadScopeId; type = 'Scope' }
+                    [ordered]@{ id = $graphUserReadWriteAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphGroupReadWriteAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphDirectoryReadWriteAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphAuditLogReadAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphUserAuthenticationMethodReadAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphUserAuthenticationMethodReadWriteAllRoleId; type = 'Role' }
                   )
                 }
               )
@@ -555,9 +569,16 @@ jobs:
           Ensure-AppRoleAssignment -PrincipalServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphUserReadWriteAllRoleId
           Ensure-AppRoleAssignment -PrincipalServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphGroupReadWriteAllRoleId
           Ensure-AppRoleAssignment -PrincipalServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphDirectoryReadWriteAllRoleId
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphAuditLogReadAllRoleId
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphAppRoleAssignmentReadWriteAllRoleId
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphUserAuthenticationMethodReadAllRoleId
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphUserAuthenticationMethodReadWriteAllRoleId
           Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphUserReadWriteAllRoleId
           Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphGroupReadWriteAllRoleId
           Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphDirectoryReadWriteAllRoleId
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphAuditLogReadAllRoleId
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphUserAuthenticationMethodReadAllRoleId
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphUserAuthenticationMethodReadWriteAllRoleId
           Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $apiSp.id -Scope 'access_as_user'
           Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $graphSp.id -Scope 'access_as_user'
           Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -Scope 'openid offline_access profile User.Read'
