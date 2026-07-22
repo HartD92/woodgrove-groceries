@@ -42,7 +42,7 @@ jobs:
 
     env:
       RESOURCE_GROUP: rg-woodgrove-dev
-      PUBLISH_DIR: ${{ runner.temp }}/publish/${{ matrix.id }}
+      PUBLISH_DIR: ${{ github.workspace }}/publish/${{ matrix.id }}
 
     steps:
       - name: Checkout repository
