@@ -375,7 +375,6 @@ All URLs already at exact semver versions (no pinning needed).
 
 **Why:** This subscription policy disables public network access unless the resource has `SecurityControl=Ignore`. Central tagging keeps Key Vault reachable from the GitHub runner for data-plane secret writes and preserves intended public endpoints.
 
-
 ---
 
 ### 2026-07-22: Monorepo app deploy uses matrixed OIDC job
@@ -418,13 +417,13 @@ All URLs already at exact semver versions (no pinning needed).
 
 ---
 
-### 2026-07-22T18:20:00Z: External ID CIAM authority format
+### 2026-07-22T18:49:00Z: External ID CIAM authority-only contract and IDW10503 signature (consolidated)
 
-**By:** David Hart
+**By:** David Hart, Trinity
 
-**What:** Microsoft Entra External ID authority values use `https://{subdomain}.ciamlogin.com/{tenantId}/v2.0`; `AzureAd:Domain` uses `{subdomain}.onmicrosoft.com`. Current deployment variables resolve to CIAM subdomain `hlacustomer` and tenant ID `1a845386-636a-4d10-a25b-9ece94a1302d` at deploy time.
+**What:** For Microsoft.Identity.Web + Entra External ID (CIAM), configure AzureAd with the Authority-only subdomain-root form `https://{subdomain}.ciamlogin.com/` plus `ClientId`, `ClientSecret`, and `CallbackPath`. Do not append `/{tenantId}/v2.0`, and do not set `AzureAd:TenantId`, `AzureAd:Domain`, or `AzureAd:Instance`. `IDW10503` on the `/signin-oidc` callback during auth-code redemption indicates a CIAM authority-shape/cloud-instance resolution problem, not a redirect URI issue; redirect URI mismatches fail earlier as `AADSTS50011` at the authorize endpoint.
 
-**Why:** Passing unresolved placeholders into Azure app settings produced an invalid `AzureAd__Authority` URI and caused Microsoft.Identity.Web `UriFormatException` HTTP 500s. Deploy-time substitution fixed the live site while keeping public committed parameters placeholder-only.
+**Why:** Microsoft.Identity.Web v3.14.1's CIAM token-acquisition path resolves the tenant/cloud instance from the `ciamlogin.com` subdomain automatically. The workforce-style authority plus `TenantId`/`Domain` broke cloud-instance resolution; PR #21 restored the deployed storefront to the known-good CIAM contract and sign-in was verified end-to-end.
 
 ---
 

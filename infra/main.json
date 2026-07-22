@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "8661842205778613630"
+      "templateHash": "7218186728623854171"
     }
   },
   "parameters": {
@@ -713,12 +713,28 @@
                 "value": "[variables('kvRefAppInsights')]"
               },
               {
+                "name": "WoodgroveGroceriesApi__BaseUrl",
+                "value": "[format('api://woodgrove-groceries-api-{0}', parameters('environmentName'))]"
+              },
+              {
+                "name": "WoodgroveGroceriesApi__Scopes__0",
+                "value": "access_as_user"
+              },
+              {
                 "name": "WoodgroveGroceriesApi__Endpoint",
                 "value": "[format('https://{0}.azurewebsites.net/', variables('apiAppName'))]"
               },
               {
                 "name": "WoodgroveGroceriesAuthApi__Endpoint",
                 "value": "[format('https://{0}.azurewebsites.net/', variables('authAppName'))]"
+              },
+              {
+                "name": "GraphApiMiddleware__BaseUrl",
+                "value": "[format('api://woodgrove-graph-middleware-{0}', parameters('environmentName'))]"
+              },
+              {
+                "name": "GraphApiMiddleware__Scopes__0",
+                "value": "access_as_user"
               },
               {
                 "name": "GraphApiMiddleware__Endpoint",
