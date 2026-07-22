@@ -222,9 +222,9 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__Domain',                              value: webDomain }
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING',         value: kvRefAppInsights }
-      { name: 'Api__BaseUrl',                                  value: 'https://${apiAppName}.azurewebsites.net' }
-      { name: 'GraphMiddleware__BaseUrl',                      value: 'https://${graphAppName}.azurewebsites.net' }
-      { name: 'AuthApi__BaseUrl',                              value: 'https://${authAppName}.azurewebsites.net' }
+      { name: 'WoodgroveGroceriesApi__Endpoint',               value: 'https://${apiAppName}.azurewebsites.net/' }
+      { name: 'WoodgroveGroceriesAuthApi__Endpoint',           value: 'https://${authAppName}.azurewebsites.net/' }
+      { name: 'GraphApiMiddleware__Endpoint',                  value: 'https://${graphAppName}.azurewebsites.net/profile' }
       { name: 'AzureCommunicationServices__ConnectionString',  value: kvRefAcsConn }
       { name: 'Cloudflare__ZoneId',                            value: cloudflareZoneId }
       { name: 'Cloudflare__ApiSecret',                         value: kvRefCloudflare }

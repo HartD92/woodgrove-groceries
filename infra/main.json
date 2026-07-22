@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "6236179314733554327"
+      "templateHash": "16334678367586799309"
     }
   },
   "parameters": {
@@ -721,16 +721,16 @@
                 "value": "[variables('kvRefAppInsights')]"
               },
               {
-                "name": "Api__BaseUrl",
-                "value": "[format('https://{0}.azurewebsites.net', variables('apiAppName'))]"
+                "name": "WoodgroveGroceriesApi__Endpoint",
+                "value": "[format('https://{0}.azurewebsites.net/', variables('apiAppName'))]"
               },
               {
-                "name": "GraphMiddleware__BaseUrl",
-                "value": "[format('https://{0}.azurewebsites.net', variables('graphAppName'))]"
+                "name": "WoodgroveGroceriesAuthApi__Endpoint",
+                "value": "[format('https://{0}.azurewebsites.net/', variables('authAppName'))]"
               },
               {
-                "name": "AuthApi__BaseUrl",
-                "value": "[format('https://{0}.azurewebsites.net', variables('authAppName'))]"
+                "name": "GraphApiMiddleware__Endpoint",
+                "value": "[format('https://{0}.azurewebsites.net/profile', variables('graphAppName'))]"
               },
               {
                 "name": "AzureCommunicationServices__ConnectionString",
