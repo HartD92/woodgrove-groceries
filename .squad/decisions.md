@@ -374,3 +374,74 @@ All URLs already at exact semver versions (no pinning needed).
 **What:** Added `SecurityControl: Ignore` to the shared `allTags` object in `infra/main.bicep` so all deployed resources receive the policy exemption tag.
 
 **Why:** This subscription policy disables public network access unless the resource has `SecurityControl=Ignore`. Central tagging keeps Key Vault reachable from the GitHub runner for data-plane secret writes and preserves intended public endpoints.
+
+
+---
+
+### 2026-07-22: Monorepo app deploy uses matrixed OIDC job
+
+**By:** Dozer
+
+**What:** Replaced the stale single-app portal-generated deployment workflow with one matrixed GitHub Actions job that publishes and deploys the web, API, auth, and graph services independently on ubuntu-latest. Each matrix leg logs into Azure through the proven azure-infra OIDC repo variables and resolves the tokenized App Service name from `rg-woodgrove-dev` by role infix before deployment.
+
+**Why:** A matrix keeps the four app deployments DRY and parallel while avoiding hardcoded App Service suffix tokens or stale portal-generated secrets. Resolving the App Service name at deploy time keeps the workflow aligned with tokenized Bicep deployments and fails clearly if an expected app cannot be found.
+
+---
+
+### 2026-07-22: Storefront service endpoints use runtime App Service URLs
+
+**By:** Dozer
+
+**What:** Updated the storefront web app Bicep settings to emit the exact endpoint keys consumed by the application: `WoodgroveGroceriesApi__Endpoint`, `WoodgroveGroceriesAuthApi__Endpoint`, and `GraphApiMiddleware__Endpoint`. The values are derived from the existing tokenized App Service name variables and preserve the required trailing slash or `/profile` path contract.
+
+**Why:** The previous `Api__BaseUrl`, `AuthApi__BaseUrl`, and `GraphMiddleware__BaseUrl` settings did not match any storefront configuration reads, causing the app to fall back to hardcoded demo domains instead of calling freshly deployed sibling services.
+
+---
+
+### 2026-07-22: Storefront canonical-domain rewrite removed; sibling endpoints remain deployment-supplied
+
+**By:** Switch
+
+**What:** Removed the storefront canonical-host rewrite from `src/storefront/web.config` so the site can serve under any Azure-assigned host. Storefront sibling service endpoints must still be supplied by deployment configuration rather than relying on checked-in demo-domain defaults.
+
+**Why:** The canonical-domain rewrite blocked Azure-hosted validation. Runtime endpoint settings keep the public repo free of environment-specific hostnames while allowing each deployment to call its matching sibling services.
+
+---
+
+### 2026-07-22T18:20:00Z: Public repo deployment values stay out of committed config
+
+**By:** David Hart
+
+**What:** This is a public repository. Do not hardcode tenant IDs, CIAM subdomains, client IDs, or environment-specific values in committed application, workflow, or infra parameter files. Source them from GitHub Actions repository variables/secrets at deploy time; keep `infra/main.bicepparam` placeholders as placeholders.
+
+**Why:** Public files must remain reusable and must not bake one tenant or environment into source. Deployment-time repo variables/secrets preserve portability while allowing Azure deployments to receive real values.
+
+---
+
+### 2026-07-22T18:20:00Z: External ID CIAM authority format
+
+**By:** David Hart
+
+**What:** Microsoft Entra External ID authority values use `https://{subdomain}.ciamlogin.com/{tenantId}/v2.0`; `AzureAd:Domain` uses `{subdomain}.onmicrosoft.com`. Current deployment variables resolve to CIAM subdomain `hlacustomer` and tenant ID `1a845386-636a-4d10-a25b-9ece94a1302d` at deploy time.
+
+**Why:** Passing unresolved placeholders into Azure app settings produced an invalid `AzureAd__Authority` URI and caused Microsoft.Identity.Web `UriFormatException` HTTP 500s. Deploy-time substitution fixed the live site while keeping public committed parameters placeholder-only.
+
+---
+
+### 2026-07-22T18:20:00Z: Cloudflare API key not required by app code
+
+**By:** David Hart
+
+**What:** Do not require a Cloudflare API key for the application deployment path. The current .NET codebase has no `.cs` consumers for a Cloudflare API key; related demos are implemented as external Cloudflare-dashboard WAF rules.
+
+**Why:** Treating Cloudflare API credentials as required would add unnecessary secret handling and deployment coupling for functionality that is not consumed by the app code.
+
+---
+
+### 2026-07-22T18:20:00Z: Deploy-infra workflow push trigger can collide with manual runs
+
+**By:** David Hart
+
+**What:** Merging changes to `.github/workflows/deploy-infra.yml` automatically triggers the deploy-infra workflow because the workflow file is inside its push path filter alongside `infra/**`. Avoid also triggering a manual `workflow_dispatch` for the same revision.
+
+**Why:** Concurrent deploy-infra runs can collide on Azure nested deployments, especially ACS, and fail with `DeploymentActive`. Let the push-triggered run finish before starting any manual redeploy.
