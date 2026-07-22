@@ -130,7 +130,7 @@ function updateUserAttributes() {
         accountEnabled: $('#inputAccountEnabled').prop('checked')
     }
 
-    $.post("/userattributes", payload, function (result) {
+    $.post("/api/userattributes", payload, function (result) {
 
         $("#editProfileButtonSpinner").hide();
         $("#editProfileButton").prop("disabled", false);
