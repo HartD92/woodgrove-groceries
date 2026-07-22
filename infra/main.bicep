@@ -48,7 +48,7 @@ param authClientId string
 @description('Primary public domain for the web app (e.g. woodgrovedemo.com)')
 param webDomain string = 'woodgrovedemo.com'
 
-@description('Entra authority URL — e.g. https://<tenant>.ciamlogin.com/<tenantId>/v2.0')
+@description('Entra authority URL — e.g. https://<tenant>.ciamlogin.com/')
 param entraAuthorityUrl string
 
 @description('Cloudflare Zone ID (non-secret; used for DNS automation app setting)')
@@ -216,10 +216,8 @@ module webApp 'modules/webApp.bicep' = {
     websiteLoadCertificates: websiteLoadCertificates
     tags: allTags
     appSettings: [
-      { name: 'AzureAd__TenantId',                            value: tenantId }
       { name: 'AzureAd__ClientId',                            value: resolvedWebClientId }
       { name: 'AzureAd__ClientSecret',                        value: kvRefWebSecret }
-      { name: 'AzureAd__Domain',                              value: webDomain }
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING',         value: kvRefAppInsights }
       { name: 'WoodgroveGroceriesApi__Endpoint',               value: 'https://${apiAppName}.azurewebsites.net/' }
