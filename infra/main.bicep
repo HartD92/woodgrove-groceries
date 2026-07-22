@@ -217,8 +217,9 @@ module webApp 'modules/webApp.bicep' = {
     tags: allTags
     appSettings: [
       { name: 'AzureAd__ClientId',                            value: resolvedWebClientId }
-      { name: 'AzureAd__ClientSecret',                        value: kvRefWebSecret }
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
+      { name: 'AzureAd__ClientCredentials__0__SourceType',     value: 'ClientSecret' }
+      { name: 'AzureAd__ClientCredentials__0__ClientSecret',   value: kvRefWebSecret }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING',         value: kvRefAppInsights }
       { name: 'WoodgroveGroceriesApi__BaseUrl',                value: 'api://woodgrove-groceries-api-${environmentName}' }
       { name: 'WoodgroveGroceriesApi__Scopes__0',              value: 'access_as_user' }
