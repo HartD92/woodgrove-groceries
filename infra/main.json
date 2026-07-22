@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "7218186728623854171"
+      "templateHash": "4864787059349720612"
     }
   },
   "parameters": {
@@ -701,12 +701,16 @@
                 "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.webClientId.value, ''), parameters('webClientId'))]"
               },
               {
-                "name": "AzureAd__ClientSecret",
-                "value": "[variables('kvRefWebSecret')]"
-              },
-              {
                 "name": "AzureAd__Authority",
                 "value": "[parameters('entraAuthorityUrl')]"
+              },
+              {
+                "name": "AzureAd__ClientCredentials__0__SourceType",
+                "value": "ClientSecret"
+              },
+              {
+                "name": "AzureAd__ClientCredentials__0__ClientSecret",
+                "value": "[variables('kvRefWebSecret')]"
               },
               {
                 "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
