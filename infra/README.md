@@ -388,7 +388,7 @@ $authExtBody = [ordered]@{
   description   = 'Woodgrove custom authentication extension'
   endpointConfiguration = [ordered]@{
     '@odata.type' = '#microsoft.graph.httpRequestEndpoint'
-    targetUrl     = "https://$($AuthHost)/api/CustomAuthenticationExtension"
+    targetUrl     = "https://$($AuthHost)/OnTokenIssuanceStart"
   }
   authenticationConfiguration = [ordered]@{
     '@odata.type' = '#microsoft.graph.azureAdTokenAuthentication'

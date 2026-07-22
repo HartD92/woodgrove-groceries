@@ -286,7 +286,7 @@ module graphApp 'modules/webApp.bicep' = {
 // --- auth:  woodgrove-auth-api  (auth-api.woodgrovedemo.com)
 // *** STABLE PUBLIC HTTPS ENDPOINT REQUIRED ***
 // Entra External ID registers this app as a custom authentication extension.
-// The callback URL is: https://<authAppName>.azurewebsites.net/api/CustomAuthenticationExtension
+// The callback URL is: https://<authAppName>.azurewebsites.net/OnTokenIssuanceStart
 // That exact URL must be registered in the Entra portal — see README for manual steps.
 module authApp 'modules/webApp.bicep' = {
   name: 'authApp'
