@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "4864787059349720612"
+      "templateHash": "16445738142347970320"
     }
   },
   "parameters": {
@@ -128,6 +128,7 @@
     "kvRefAppInsights": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/appinsights-connection-string/)', variables('kvBaseUri'))]",
     "kvRefAcsConn": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/acs-connection-string/)', variables('kvBaseUri'))]",
     "kvRefWebSecret": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/web-client-secret/)', variables('kvBaseUri'))]",
+    "kvRefGraphSecret": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/graph-client-secret/)', variables('kvBaseUri'))]",
     "kvRefCloudflare": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/cloudflare-api-secret/)', variables('kvBaseUri'))]"
   },
   "resources": [
@@ -713,6 +714,18 @@
                 "value": "[variables('kvRefWebSecret')]"
               },
               {
+                "name": "MicrosoftGraph__TenantId",
+                "value": "[parameters('tenantId')]"
+              },
+              {
+                "name": "MicrosoftGraph__ClientId",
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.webClientId.value, ''), parameters('webClientId'))]"
+              },
+              {
+                "name": "MicrosoftGraph__ClientSecret",
+                "value": "[variables('kvRefWebSecret')]"
+              },
+              {
                 "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
                 "value": "[variables('kvRefAppInsights')]"
               },
@@ -1107,6 +1120,18 @@
               {
                 "name": "AzureAd__Authority",
                 "value": "[parameters('entraAuthorityUrl')]"
+              },
+              {
+                "name": "MicrosoftGraph__TenantId",
+                "value": "[parameters('tenantId')]"
+              },
+              {
+                "name": "MicrosoftGraph__ClientId",
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
+              },
+              {
+                "name": "MicrosoftGraph__ClientSecret",
+                "value": "[variables('kvRefGraphSecret')]"
               },
               {
                 "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",

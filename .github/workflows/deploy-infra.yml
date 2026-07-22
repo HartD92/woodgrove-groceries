@@ -88,6 +88,7 @@ jobs:
           $graphOpenIdScopeId = '37f7f235-527c-4136-accd-4a02d197296e'
           $graphOfflineAccessScopeId = '7427e0e9-2fba-42fe-b0c0-848c9e6a8182'
           $graphProfileScopeId = '14dad69e-099b-42c9-810b-d002981feec1'
+          $graphUserReadScopeId = 'e1fe6dd8-ba31-4d61-89e7-88639da4683d'
           $graphUserReadWriteAllRoleId = '741f803b-c850-494e-b5df-cde7c675a1ca'
           $graphGroupReadWriteAllRoleId = '62a82d76-70ea-41e2-9197-370581804d09'
           $graphDirectoryReadWriteAllRoleId = '19dbc75e-c2e2-444c-a770-ec69d8559fc7'
@@ -467,12 +468,67 @@ jobs:
                     [ordered]@{ id = $graphOpenIdScopeId; type = 'Scope' }
                     [ordered]@{ id = $graphOfflineAccessScopeId; type = 'Scope' }
                     [ordered]@{ id = $graphProfileScopeId; type = 'Scope' }
+                    [ordered]@{ id = $graphUserReadScopeId; type = 'Scope' }
                   )
                 }
               )
             })
           $webApp = Get-AppRegistrationByAppId -AppId $webApp.appId -Description "show app registration after web patch: $webDisplayName"
           $webSp = Ensure-ServicePrincipal -AppId $webApp.appId
+
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$($apiApp.id)" `
+            -Body ([ordered]@{
+              api = [ordered]@{
+                requestedAccessTokenVersion = 2
+                oauth2PermissionScopes = @(
+                  [ordered]@{
+                    id = $apiAccessAsUserScopeId
+                    adminConsentDisplayName = 'Access woodgrove-groceries-api as the signed-in user'
+                    adminConsentDescription = 'Allows the app to access woodgrove-groceries-api on behalf of the signed-in user.'
+                    userConsentDisplayName = 'Access woodgrove-groceries-api'
+                    userConsentDescription = 'Allows this app to access woodgrove-groceries-api on your behalf.'
+                    value = 'access_as_user'
+                    type = 'User'
+                    isEnabled = $true
+                  }
+                )
+                preAuthorizedApplications = @(
+                  [ordered]@{
+                    appId = $webApp.appId
+                    delegatedPermissionIds = @($apiAccessAsUserScopeId)
+                  }
+                )
+              }
+            })
+          $apiApp = Get-AppRegistrationByAppId -AppId $apiApp.appId -Description "show app registration after API pre-authorization patch: $apiDisplayName"
+
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$($graphApp.id)" `
+            -Body ([ordered]@{
+              api = [ordered]@{
+                requestedAccessTokenVersion = 2
+                oauth2PermissionScopes = @(
+                  [ordered]@{
+                    id = $graphAccessAsUserScopeId
+                    adminConsentDisplayName = 'Access woodgrove-graph-middleware as the signed-in user'
+                    adminConsentDescription = 'Allows the app to access woodgrove-graph-middleware on behalf of the signed-in user.'
+                    userConsentDisplayName = 'Access woodgrove-graph-middleware'
+                    userConsentDescription = 'Allows this app to access woodgrove-graph-middleware on your behalf.'
+                    value = 'access_as_user'
+                    type = 'User'
+                    isEnabled = $true
+                  }
+                )
+                preAuthorizedApplications = @(
+                  [ordered]@{
+                    appId = $webApp.appId
+                    delegatedPermissionIds = @($graphAccessAsUserScopeId)
+                  }
+                )
+              }
+            })
+          $graphApp = Get-AppRegistrationByAppId -AppId $graphApp.appId -Description "show app registration after graph pre-authorization patch: $graphDisplayName"
 
           $authApp = Ensure-AppRegistration -DisplayName $authDisplayName
           $authRole = @($authApp.appRoles | Where-Object { $_.value -eq 'CustomAuthenticationExtension.Receive.Payload' } | Select-Object -First 1)[0]
@@ -496,12 +552,15 @@ jobs:
           $authSp = Ensure-ServicePrincipal -AppId $authApp.appId
 
           $msGraphSp = az ad sp show --id $msGraphAppId --output json | ConvertFrom-Json
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphUserReadWriteAllRoleId
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphGroupReadWriteAllRoleId
+          Ensure-AppRoleAssignment -PrincipalServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphDirectoryReadWriteAllRoleId
           Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphUserReadWriteAllRoleId
           Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphGroupReadWriteAllRoleId
           Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphDirectoryReadWriteAllRoleId
           Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $apiSp.id -Scope 'access_as_user'
           Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $graphSp.id -Scope 'access_as_user'
-          Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -Scope 'openid offline_access profile'
+          Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -Scope 'openid offline_access profile User.Read'
 
           "web_client_id=$($webApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "api_client_id=$($apiApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -777,6 +836,124 @@ jobs:
               Remove-Item $secretPath -Force
             }
           }
+
+      - name: Azure login to workforce tenant for graph Key Vault check
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Check graph-client-secret in Key Vault
+        id: graph_secret_check
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $kvName = '${{ steps.web_secret_check.outputs.kv_name }}'
+
+          $prevEap = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
+          $secretId = az keyvault secret show `
+            --vault-name $kvName `
+            --name graph-client-secret `
+            --query id `
+            --output tsv 2>$null
+          $showExit = $LASTEXITCODE
+          $ErrorActionPreference = $prevEap
+          if ($showExit -ne 0) {
+            $secretId = $null
+          }
+          $global:LASTEXITCODE = 0
+
+          $exists = -not [string]::IsNullOrWhiteSpace($secretId)
+          "should_update=$(( -not $exists ).ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          if ($exists) {
+            Write-Host 'graph-client-secret already present in Key Vault — skipping creation.'
+          }
+
+      - name: Azure login to ExtID tenant for graph credential
+        if: steps.graph_secret_check.outputs.should_update == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.ENTRA_CLIENT_ID }}
+          tenant-id: ${{ vars.ENTRA_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Create graph-middleware app credential in ExtID
+        if: steps.graph_secret_check.outputs.should_update == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $secretPath = Join-Path $PWD '.graph-client-secret'
+
+          Write-Host "First provision: generating client secret for graph-middleware app $env:GRAPH_CLIENT_ID"
+          $secretJson = az ad app credential reset `
+            --id $env:GRAPH_CLIENT_ID `
+            --append `
+            --display-name "cicd-managed-$($env:ENV_NAME)" `
+            --years 1 `
+            --output json | ConvertFrom-Json
+
+          $clientSecret = $secretJson.password
+          Write-Host "::add-mask::$clientSecret"
+          $clientSecret | Out-File -FilePath $secretPath -Encoding utf8 -NoNewline
+
+      - name: Azure login to workforce tenant for graph Key Vault write
+        if: steps.graph_secret_check.outputs.should_update == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Store graph-client-secret in Key Vault
+        if: steps.graph_secret_check.outputs.should_update == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $secretPath = Join-Path $PWD '.graph-client-secret'
+          try {
+            $clientSecret = Get-Content -Path $secretPath -Raw
+            Write-Host "::add-mask::$clientSecret"
+            $maxAttempts = 6
+            for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+              az keyvault secret set `
+                --vault-name '${{ steps.web_secret_check.outputs.kv_name }}' `
+                --name graph-client-secret `
+                --value $clientSecret `
+                --output none
+              if ($LASTEXITCODE -eq 0) {
+                break
+              }
+
+              if ($attempt -eq $maxAttempts) {
+                throw "Failed to store graph-client-secret in Key Vault after $maxAttempts attempts."
+              }
+
+              Write-Host "Key Vault secret set failed (attempt $attempt/$maxAttempts); waiting 15 seconds for RBAC propagation..."
+              Start-Sleep -Seconds 15
+            }
+            Write-Host "graph-client-secret stored in Key Vault ${{ steps.web_secret_check.outputs.kv_name }}"
+          }
+          finally {
+            if (Test-Path $secretPath) {
+              Remove-Item $secretPath -Force
+            }
+          }
+
+      - name: Restart graph-middleware after graph secret creation
+        if: steps.graph_secret_check.outputs.should_update == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $outputs = (Get-Content deploy-output.json -Raw | ConvertFrom-Json).properties.outputs
+          $rgName = $outputs.resourceGroupName.value
+          $graphAppName = ($outputs.graphAppHostName.value -split '\.')[0]
+          az webapp restart `
+            --resource-group $rgName `
+            --name $graphAppName `
+            --output none
 
       - name: Summarise deployment outputs
         if: success()
