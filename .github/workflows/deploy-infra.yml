@@ -488,6 +488,19 @@ jobs:
               )
             })
           $webApp = Get-AppRegistrationByAppId -AppId $webApp.appId -Description "show app registration after web patch: $webDisplayName"
+
+          # Patch acceptMappedClaims=true so the token-issuance-start custom claims provider
+          # can inject loyalty claims (LoyaltyNumber/LoyaltySince/LoyaltyTier) into tokens
+          # without requiring an app-specific signing key (safe for single-tenant AzureADMyOrg).
+          # Read-merge-patch: copy existing api fields first to avoid clobbering
+          # preAuthorizedApplications, oauth2PermissionScopes, or other nested values.
+          $webApiPatch = if ($webApp.api) { $webApp.api } else { [PSCustomObject]@{} }
+          $webApiPatch | Add-Member -NotePropertyName 'acceptMappedClaims' -NotePropertyValue $true -Force
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$($webApp.id)" `
+            -Body ([ordered]@{ api = $webApiPatch })
+          $webApp = Get-AppRegistrationByAppId -AppId $webApp.appId -Description "show app registration after web acceptMappedClaims patch: $webDisplayName"
+
           $webSp = Ensure-ServicePrincipal -AppId $webApp.appId
 
           Invoke-GraphPatch `

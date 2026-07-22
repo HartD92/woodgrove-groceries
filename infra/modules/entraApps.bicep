@@ -252,7 +252,7 @@ resource graphServicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' = {
 // extension.  The extension itself (Microsoft.Graph/customAuthenticationExtensions)
 // is NOT a supported Bicep resource type in v1.0 or beta as of 2025-08.
 // It must be registered out-of-band after deployment.
-// Callback URL: https://<authAppHostName>/api/CustomAuthenticationExtension
+// Callback URL: https://<authAppHostName>/OnTokenIssuanceStart
 // ============================================================
 
 resource authApplication 'Microsoft.Graph/applications@v1.0' = {
