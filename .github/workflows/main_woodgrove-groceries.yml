@@ -1,7 +1,12 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
+# =============================================================================
+# Woodgrove Groceries — Application Deploy
+#
+# Monorepo deployment for all four App Services. Each matrix leg publishes one
+# .NET service, logs into Azure with the proven azure-infra OIDC repo variables,
+# resolves the tokenized App Service name by role infix, then deploys that app.
+# =============================================================================
 
-name: Build and deploy ASP.Net Core app to Azure Web App - woodgrove-groceries
+name: Build and deploy Woodgrove Groceries apps
 
 on:
   push:
@@ -10,56 +15,80 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: windows-latest
+  deploy:
+    name: Build and deploy ${{ matrix.id }}
+    runs-on: ubuntu-latest
+    environment: azure-infra
+    permissions:
+      id-token: write
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: web
+            project: src/storefront/woodgrovedemo.csproj
+            infix: -web-
+          - id: api
+            project: src/api/woodgrove-groceries-api.csproj
+            infix: -api-
+          - id: auth
+            project: src/auth-api/woodgroveapi.csproj
+            infix: -auth-
+          - id: graph
+            project: src/graph-middleware/woodgrove-groceries-graph-middleware.csproj
+            infix: -graph-
+
+    env:
+      RESOURCE_GROUP: rg-woodgrove-dev
+      PUBLISH_DIR: ${{ runner.temp }}/publish/${{ matrix.id }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up .NET Core
+      - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.x'
 
-      - name: Build with dotnet
-        run: dotnet build --configuration Release
+      - name: Publish ${{ matrix.id }}
+        run: dotnet publish "${{ matrix.project }}" --configuration Release --output "${PUBLISH_DIR}"
 
-      - name: dotnet publish
-        run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/myapp"
-
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: .net-app
-          path: ${{env.DOTNET_ROOT}}/myapp
-
-  deploy:
-    runs-on: windows-latest
-    needs: build
-    environment:
-      name: 'Production'
-      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-    permissions:
-      id-token: write #This is required for requesting the JWT
-
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: .net-app
-      
-      - name: Login to Azure
+      - name: Azure login to workforce tenant (OIDC)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5760C5C5FB124FD088DA1CEF72A5730F }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_74EA9EEFE11849A6AE9578B8ACAF6C62 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_497010C4B3CB472E8691D6D7BB1E2B72 }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy to Azure Web App
-        id: deploy-to-webapp
+      - name: Resolve App Service name
+        id: resolve-app
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t app_names < <(az webapp list \
+            --resource-group "${RESOURCE_GROUP}" \
+            --query "[?contains(name,'${{ matrix.infix }}')].name" \
+            --output tsv)
+
+          if [[ ${#app_names[@]} -eq 0 ]]; then
+            echo "::error::No App Service found in ${RESOURCE_GROUP} with name infix '${{ matrix.infix }}'."
+            exit 1
+          fi
+
+          if [[ ${#app_names[@]} -gt 1 ]]; then
+            echo "::error::Expected one App Service in ${RESOURCE_GROUP} with name infix '${{ matrix.infix }}', found: ${app_names[*]}"
+            exit 1
+          fi
+
+          echo "app-name=${app_names[0]}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved ${{ matrix.id }} App Service: ${app_names[0]}"
+
+      - name: Deploy ${{ matrix.id }} to Azure App Service
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'woodgrove-groceries'
-          slot-name: 'Production'
-          package: .
-          
+          app-name: ${{ steps.resolve-app.outputs.app-name }}
+          package: ${{ env.PUBLISH_DIR }}
