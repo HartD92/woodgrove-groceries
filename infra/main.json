@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "1656308708834390015"
+      "templateHash": "16563166074031564779"
     }
   },
   "parameters": {
@@ -130,6 +130,13 @@
         "description": "ObjectId of the Woodgrove Exclusive Demos security group in the ExtID tenant"
       }
     },
+    "paymentApiClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "App registration client ID — woodgrove-groceries-payment-api (downstream Payment API for OBO)"
+      }
+    },
     "tags": {
       "type": "object",
       "defaultValue": {},
@@ -163,6 +170,7 @@
     "kvRefAppInsights": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/appinsights-connection-string/)', variables('kvBaseUri'))]",
     "kvRefAcsConn": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/acs-connection-string/)', variables('kvBaseUri'))]",
     "kvRefWebSecret": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/web-client-secret/)', variables('kvBaseUri'))]",
+    "kvRefApiSecret": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/api-client-secret/)', variables('kvBaseUri'))]",
     "kvRefGraphSecret": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/graph-client-secret/)', variables('kvBaseUri'))]",
     "kvRefCloudflare": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/cloudflare-api-secret/)', variables('kvBaseUri'))]"
   },
@@ -207,7 +215,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.45.15.27210",
-              "templateHash": "2485550660016196174"
+              "templateHash": "15054267085096784600"
             }
           },
           "parameters": {
@@ -239,6 +247,8 @@
           },
           "variables": {
             "apiAccessAsUserScopeId": "[guid(parameters('environmentName'), 'woodgrove-api', 'access_as_user')]",
+            "paymentReadScopeId": "[guid(parameters('environmentName'), 'woodgrove-payment-api', 'Payment.Read')]",
+            "paymentReadWriteScopeId": "[guid(parameters('environmentName'), 'woodgrove-payment-api', 'Payment.ReadWrite')]",
             "msGraphAppId": "00000003-0000-0000-c000-000000000000",
             "graphUserReadWriteAllId": "741f803b-c850-494e-b5df-cde7c675a1ca",
             "graphGroupReadWriteAllId": "62a82d76-70ea-41e2-9197-370581804d09",
@@ -251,6 +261,57 @@
             }
           },
           "resources": {
+            "paymentApiApplication": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/applications@v1.0",
+              "properties": {
+                "uniqueName": "[format('woodgrove-groceries-payment-api-{0}', parameters('environmentName'))]",
+                "displayName": "[format('woodgrove-groceries-payment-api ({0})', parameters('environmentName'))]",
+                "api": {
+                  "requestedAccessTokenVersion": 2,
+                  "oauth2PermissionScopes": [
+                    {
+                      "id": "[variables('paymentReadScopeId')]",
+                      "adminConsentDisplayName": "Read payment information",
+                      "adminConsentDescription": "Allows the app to read payment information on behalf of the signed-in user.",
+                      "userConsentDisplayName": "Read your payment information",
+                      "userConsentDescription": "Allows this app to read your payment information.",
+                      "value": "Payment.Read",
+                      "type": "User",
+                      "isEnabled": true
+                    },
+                    {
+                      "id": "[variables('paymentReadWriteScopeId')]",
+                      "adminConsentDisplayName": "Read and write payment information",
+                      "adminConsentDescription": "Allows the app to read and write payment information on behalf of the signed-in user.",
+                      "userConsentDisplayName": "Read and write your payment information",
+                      "userConsentDescription": "Allows this app to read and write your payment information.",
+                      "value": "Payment.ReadWrite",
+                      "type": "User",
+                      "isEnabled": true
+                    }
+                  ]
+                },
+                "identifierUris": [
+                  "[format('api://woodgrove-groceries-payment-api-{0}', parameters('environmentName'))]"
+                ],
+                "signInAudience": "AzureADMyOrg"
+              }
+            },
+            "paymentApiServicePrincipal": {
+              "import": "microsoftGraphV1",
+              "type": "Microsoft.Graph/servicePrincipals@v1.0",
+              "properties": {
+                "appId": "[reference('paymentApiApplication').appId]",
+                "tags": [
+                  "woodgrove-groceries",
+                  "[parameters('environmentName')]"
+                ]
+              },
+              "dependsOn": [
+                "paymentApiApplication"
+              ]
+            },
             "apiApplication": {
               "import": "microsoftGraphV1",
               "type": "Microsoft.Graph/applications@v1.0",
@@ -275,8 +336,26 @@
                 "identifierUris": [
                   "[format('api://woodgrove-groceries-api-{0}', parameters('environmentName'))]"
                 ],
-                "signInAudience": "AzureADMyOrg"
-              }
+                "signInAudience": "AzureADMyOrg",
+                "requiredResourceAccess": [
+                  {
+                    "resourceAppId": "[reference('paymentApiApplication').appId]",
+                    "resourceAccess": [
+                      {
+                        "id": "[variables('paymentReadScopeId')]",
+                        "type": "Scope"
+                      },
+                      {
+                        "id": "[variables('paymentReadWriteScopeId')]",
+                        "type": "Scope"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "dependsOn": [
+                "paymentApiApplication"
+              ]
             },
             "apiServicePrincipal": {
               "import": "microsoftGraphV1",
@@ -468,6 +547,13 @@
                 "description": "Application (client) ID of the auth-api app registration"
               },
               "value": "[reference('authApplication').appId]"
+            },
+            "paymentApiClientId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application (client) ID of the downstream Payment API app registration"
+              },
+              "value": "[reference('paymentApiApplication').appId]"
             }
           }
         }
@@ -995,6 +1081,18 @@
               {
                 "name": "AzureAd__Authority",
                 "value": "[parameters('entraAuthorityUrl')]"
+              },
+              {
+                "name": "AzureAd__ClientCredentials__0__SourceType",
+                "value": "ClientSecret"
+              },
+              {
+                "name": "AzureAd__ClientCredentials__0__ClientSecret",
+                "value": "[variables('kvRefApiSecret')]"
+              },
+              {
+                "name": "WoodgroveGroceriesDownstreamApi__BaseUrl",
+                "value": "[format('api://{0}', if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.paymentApiClientId.value, ''), parameters('paymentApiClientId')))]"
               },
               {
                 "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
@@ -1860,6 +1958,10 @@
     "resolvedAuthClientId": {
       "type": "string",
       "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.authClientId.value, ''), parameters('authClientId'))]"
+    },
+    "resolvedPaymentApiClientId": {
+      "type": "string",
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.paymentApiClientId.value, ''), parameters('paymentApiClientId'))]"
     }
   }
 }

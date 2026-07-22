@@ -32,6 +32,7 @@ param webClientId   = '<web-app-client-id>'          // woodgrove-groceries app 
 param apiClientId   = '<api-app-client-id>'           // woodgrove-groceries-api app reg
 param graphClientId = '<graph-middleware-client-id>'  // graph-middleware app reg
 param authClientId  = '<auth-api-client-id>'          // auth-api app reg (custom auth ext)
+param paymentApiClientId = '<payment-api-client-id>'  // woodgrove-groceries-payment-api (OBO downstream)
 
 // --- Domain & authority ---
 param webDomain        = 'woodgrovedemo.com'

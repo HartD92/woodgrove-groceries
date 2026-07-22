@@ -60,6 +60,11 @@ param authAppHostName string
 // deterministic: same value for the same environmentName across all deployments
 var apiAccessAsUserScopeId = guid(environmentName, 'woodgrove-api', 'access_as_user')
 
+// Delegated scope IDs exposed by the Payment API app
+// deterministic: stable across re-deployments for the same environmentName
+var paymentReadScopeId      = guid(environmentName, 'woodgrove-payment-api', 'Payment.Read')
+var paymentReadWriteScopeId = guid(environmentName, 'woodgrove-payment-api', 'Payment.ReadWrite')
+
 // ============================================================
 // WELL-KNOWN CONSTANTS
 // ============================================================
@@ -73,6 +78,61 @@ var msGraphAppId = '00000003-0000-0000-c000-000000000000'
 var graphUserReadWriteAllId = '741f803b-c850-494e-b5df-cde7c675a1ca'   // User.ReadWrite.All (application)
 var graphGroupReadWriteAllId = '62a82d76-70ea-41e2-9197-370581804d09'  // Group.ReadWrite.All (application)
 var graphDirectoryReadWriteAllId = '19dbc75e-c2e2-444c-a770-ec69d8559fc7' // Directory.ReadWrite.All (application)
+
+// ============================================================
+// APP 0 — woodgrove-groceries-payment-api  (downstream Payment API for OBO)
+// The API app (APP 1) calls this downstream via On-Behalf-Of.
+// Defined first so its appId is available for apiApplication.requiredResourceAccess.
+// ============================================================
+
+resource paymentApiApplication 'Microsoft.Graph/applications@v1.0' = {
+  uniqueName: 'woodgrove-groceries-payment-api-${environmentName}'
+  displayName: 'woodgrove-groceries-payment-api (${environmentName})'
+
+  api: {
+    requestedAccessTokenVersion: 2
+    oauth2PermissionScopes: [
+      {
+        id: paymentReadScopeId
+        adminConsentDisplayName: 'Read payment information'
+        adminConsentDescription: 'Allows the app to read payment information on behalf of the signed-in user.'
+        userConsentDisplayName: 'Read your payment information'
+        userConsentDescription: 'Allows this app to read your payment information.'
+        value: 'Payment.Read'
+        type: 'User'
+        isEnabled: true
+      }
+      {
+        id: paymentReadWriteScopeId
+        adminConsentDisplayName: 'Read and write payment information'
+        adminConsentDescription: 'Allows the app to read and write payment information on behalf of the signed-in user.'
+        userConsentDisplayName: 'Read and write your payment information'
+        userConsentDescription: 'Allows this app to read and write your payment information.'
+        value: 'Payment.ReadWrite'
+        type: 'User'
+        isEnabled: true
+      }
+    ]
+    // NOTE: preAuthorizedApplications for the api app is applied by the deploy
+    // workflow after both SPs exist (avoids circular Bicep dependency).
+  }
+
+  // Use a stable human-readable identifier URI consistent with the other apps.
+  // In the CI/CD path the workflow sets api://<appId> directly via Graph PATCH.
+  identifierUris: [
+    'api://woodgrove-groceries-payment-api-${environmentName}'
+  ]
+
+  signInAudience: 'AzureADMyOrg'
+}
+
+resource paymentApiServicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' = {
+  appId: paymentApiApplication.appId
+  tags: [
+    'woodgrove-groceries'
+    environmentName
+  ]
+}
 
 // ============================================================
 // APP 1 — woodgrove-groceries-api (defined FIRST; web app depends on its appId)
@@ -113,6 +173,23 @@ resource apiApplication 'Microsoft.Graph/applications@v1.0' = {
 
   // The API app is single-tenant (External ID tenant).
   signInAudience: 'AzureADMyOrg'
+
+  // Declare delegated access to the downstream Payment API for OBO token exchange.
+  requiredResourceAccess: [
+    {
+      resourceAppId: paymentApiApplication.appId
+      resourceAccess: [
+        {
+          id: paymentReadScopeId
+          type: 'Scope'
+        }
+        {
+          id: paymentReadWriteScopeId
+          type: 'Scope'
+        }
+      ]
+    }
+  ]
 }
 
 resource apiServicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' = {
@@ -307,3 +384,6 @@ output graphClientId string = graphApplication.appId
 
 @description('Application (client) ID of the auth-api app registration')
 output authClientId string = authApplication.appId
+
+@description('Application (client) ID of the downstream Payment API app registration')
+output paymentApiClientId string = paymentApiApplication.appId

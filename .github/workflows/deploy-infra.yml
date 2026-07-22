@@ -34,6 +34,11 @@ on:
         required: false
         default: false
         type: boolean
+      rotate_api_secret:
+        description: 'Force rotation of api-client-secret in Key Vault. Also prunes expired credentials on the CIAM app registration.'
+        required: false
+        default: false
+        type: boolean
 
   push:
     branches:
@@ -57,6 +62,7 @@ jobs:
       api_client_id: ${{ steps.provision.outputs.api_client_id }}
       graph_client_id: ${{ steps.provision.outputs.graph_client_id }}
       auth_client_id: ${{ steps.provision.outputs.auth_client_id }}
+      payment_api_client_id: ${{ steps.provision.outputs.payment_api_client_id }}
       web_sp_id: ${{ steps.provision.outputs.web_sp_id }}
       orders_manager_role_id: ${{ steps.provision.outputs.orders_manager_role_id }}
       products_contributor_role_id: ${{ steps.provision.outputs.products_contributor_role_id }}
@@ -462,6 +468,60 @@ jobs:
           $apiApp = Get-AppRegistrationByAppId -AppId $apiApp.appId -Description "show app registration after API patch: $apiDisplayName"
           $apiSp = Ensure-ServicePrincipal -AppId $apiApp.appId
 
+          # --- Payment API app (downstream OBO target) ---
+          $paymentApiDisplayName = "woodgrove-groceries-payment-api ($envName)"
+          $paymentApiApp = Ensure-AppRegistration -DisplayName $paymentApiDisplayName
+
+          # Reuse existing scope IDs if already present (idempotent), otherwise generate stable IDs
+          $paymentReadScope = @($paymentApiApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq 'Payment.Read' } | Select-Object -First 1)[0]
+          $paymentReadScopeId = if ($paymentReadScope -and $paymentReadScope.id) {
+            Write-Host "Reusing existing scope 'Payment.Read' id=$($paymentReadScope.id)"
+            $paymentReadScope.id
+          } else {
+            New-StableGuid -Parts @($envName, 'woodgrove-payment-api', 'Payment.Read')
+          }
+          $paymentReadWriteScope = @($paymentApiApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq 'Payment.ReadWrite' } | Select-Object -First 1)[0]
+          $paymentReadWriteScopeId = if ($paymentReadWriteScope -and $paymentReadWriteScope.id) {
+            Write-Host "Reusing existing scope 'Payment.ReadWrite' id=$($paymentReadWriteScope.id)"
+            $paymentReadWriteScope.id
+          } else {
+            New-StableGuid -Parts @($envName, 'woodgrove-payment-api', 'Payment.ReadWrite')
+          }
+
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$($paymentApiApp.id)" `
+            -Body ([ordered]@{
+              signInAudience = 'AzureADMyOrg'
+              identifierUris = @("api://$($paymentApiApp.appId)")
+              api = [ordered]@{
+                requestedAccessTokenVersion = 2
+                oauth2PermissionScopes = @(
+                  [ordered]@{
+                    id = $paymentReadScopeId
+                    adminConsentDisplayName = 'Read payment information'
+                    adminConsentDescription = 'Allows the app to read payment information on behalf of the signed-in user.'
+                    userConsentDisplayName = 'Read your payment information'
+                    userConsentDescription = 'Allows this app to read your payment information.'
+                    value = 'Payment.Read'
+                    type = 'User'
+                    isEnabled = $true
+                  }
+                  [ordered]@{
+                    id = $paymentReadWriteScopeId
+                    adminConsentDisplayName = 'Read and write payment information'
+                    adminConsentDescription = 'Allows the app to read and write payment information on behalf of the signed-in user.'
+                    userConsentDisplayName = 'Read and write your payment information'
+                    userConsentDescription = 'Allows this app to read and write your payment information.'
+                    value = 'Payment.ReadWrite'
+                    type = 'User'
+                    isEnabled = $true
+                  }
+                )
+              }
+            })
+          $paymentApiApp = Get-AppRegistrationByAppId -AppId $paymentApiApp.appId -Description "show app registration after payment API patch: $paymentApiDisplayName"
+          $paymentApiSp = Ensure-ServicePrincipal -AppId $paymentApiApp.appId
+
           $graphApp = Ensure-AppRegistration -DisplayName $graphDisplayName
           $graphScope = @($graphApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq 'access_as_user' } | Select-Object -First 1)[0]
           $graphAccessAsUserScopeId = if ($graphScope -and $graphScope.id) { $graphScope.id } else { New-StableGuid -Parts @($envName, 'woodgrove-graph-middleware', 'access_as_user') }
@@ -637,8 +697,33 @@ jobs:
                   }
                 )
               }
+              requiredResourceAccess = @(
+                [ordered]@{
+                  resourceAppId = $paymentApiApp.appId
+                  resourceAccess = @(
+                    [ordered]@{ id = $paymentReadScopeId; type = 'Scope' }
+                    [ordered]@{ id = $paymentReadWriteScopeId; type = 'Scope' }
+                  )
+                }
+              )
             })
           $apiApp = Get-AppRegistrationByAppId -AppId $apiApp.appId -Description "show app registration after API pre-authorization patch: $apiDisplayName"
+
+          # Pre-authorize the api app on the Payment API so OBO token exchange
+          # succeeds without per-user consent prompts.
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$($paymentApiApp.id)" `
+            -Body ([ordered]@{
+              api = [ordered]@{
+                preAuthorizedApplications = @(
+                  [ordered]@{
+                    appId = $apiApp.appId
+                    delegatedPermissionIds = @($paymentReadScopeId, $paymentReadWriteScopeId)
+                  }
+                )
+              }
+            })
+          $paymentApiApp = Get-AppRegistrationByAppId -AppId $paymentApiApp.appId -Description "show payment API app after pre-authorization patch: $paymentApiDisplayName"
 
           Invoke-GraphPatch `
             -Uri "https://graph.microsoft.com/v1.0/applications/$($graphApp.id)" `
@@ -705,11 +790,14 @@ jobs:
           Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $apiSp.id -Scope 'access_as_user'
           Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $graphSp.id -Scope 'access_as_user'
           Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -Scope 'openid offline_access profile User.Read'
+          # Admin-consent the api app's delegated access to the Payment API (required for OBO)
+          Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $apiSp.id -ResourceServicePrincipalId $paymentApiSp.id -Scope 'Payment.Read Payment.ReadWrite'
 
           "web_client_id=$($webApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "api_client_id=$($apiApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "graph_client_id=$($graphApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "auth_client_id=$($authApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "payment_api_client_id=$($paymentApiApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "web_sp_id=$($webSp.id)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "orders_manager_role_id=$ordersManagerRoleId" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "products_contributor_role_id=$productsContributorRoleId" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -726,10 +814,12 @@ jobs:
       ENV_NAME: ${{ inputs.environment || 'dev' }}
       LOCATION: westus2
       ROTATE_WEB_SECRET: ${{ inputs.rotate_web_secret || false }}
+      ROTATE_API_SECRET: ${{ inputs.rotate_api_secret || false }}
       WEB_CLIENT_ID: ${{ needs.entra-provision.outputs.web_client_id }}
       API_CLIENT_ID: ${{ needs.entra-provision.outputs.api_client_id }}
       GRAPH_CLIENT_ID: ${{ needs.entra-provision.outputs.graph_client_id }}
       AUTH_CLIENT_ID: ${{ needs.entra-provision.outputs.auth_client_id }}
+      PAYMENT_API_CLIENT_ID: ${{ needs.entra-provision.outputs.payment_api_client_id }}
       ENTRA_TENANT_ID: ${{ vars.ENTRA_TENANT_ID }}
       CIAM_SUBDOMAIN: ${{ vars.ENTRA_CIAM_SUBDOMAIN }}
       APP_ROLES_PRINCIPAL_ID: ${{ needs.entra-provision.outputs.web_sp_id }}
@@ -774,6 +864,7 @@ jobs:
                          apiClientId=$env:API_CLIENT_ID `
                          graphClientId=$env:GRAPH_CLIENT_ID `
                          authClientId=$env:AUTH_CLIENT_ID `
+                         paymentApiClientId=$env:PAYMENT_API_CLIENT_ID `
                          tenantId=$env:ENTRA_TENANT_ID `
                          webDomain="$($env:CIAM_SUBDOMAIN).onmicrosoft.com" `
                          entraAuthorityUrl="https://$($env:CIAM_SUBDOMAIN).ciamlogin.com/" `
@@ -798,6 +889,7 @@ jobs:
                          apiClientId=$env:API_CLIENT_ID `
                          graphClientId=$env:GRAPH_CLIENT_ID `
                          authClientId=$env:AUTH_CLIENT_ID `
+                         paymentApiClientId=$env:PAYMENT_API_CLIENT_ID `
                          tenantId=$env:ENTRA_TENANT_ID `
                          entraAuthorityUrl="https://$($env:CIAM_SUBDOMAIN).ciamlogin.com/" `
                          webDomain="$($env:CIAM_SUBDOMAIN).onmicrosoft.com" `
@@ -1118,6 +1210,139 @@ jobs:
             --resource-group $rgName `
             --name $graphAppName `
             --output none
+
+      - name: Azure login to workforce tenant for api Key Vault check
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Check api-client-secret in Key Vault
+        id: api_secret_check
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $kvName = '${{ steps.web_secret_check.outputs.kv_name }}'
+          $rotate = [System.Convert]::ToBoolean($env:ROTATE_API_SECRET)
+
+          $prevEap = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
+          $secretId = az keyvault secret show `
+            --vault-name $kvName `
+            --name api-client-secret `
+            --query id `
+            --output tsv 2>$null
+          $showExit = $LASTEXITCODE
+          $ErrorActionPreference = $prevEap
+          if ($showExit -ne 0) {
+            $secretId = $null
+          }
+          $global:LASTEXITCODE = 0
+
+          $exists = -not [string]::IsNullOrWhiteSpace($secretId)
+          $shouldUpdate = $rotate -or -not $exists
+          "should_update=$($shouldUpdate.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          if ($exists -and -not $rotate) {
+            Write-Host 'api-client-secret already present in Key Vault — skipping creation (use rotate_api_secret to force rotation).'
+          }
+
+      - name: Azure login to ExtID tenant for api credential
+        if: steps.api_secret_check.outputs.should_update == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.ENTRA_CLIENT_ID }}
+          tenant-id: ${{ vars.ENTRA_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Create or rotate api app credential in ExtID
+        if: steps.api_secret_check.outputs.should_update == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $secretPath = Join-Path $PWD '.api-client-secret'
+          $rotate = [System.Convert]::ToBoolean($env:ROTATE_API_SECRET)
+
+          if ($rotate) {
+            Write-Host "rotate_api_secret=true — forcing credential rotation for app $env:API_CLIENT_ID"
+          }
+          else {
+            Write-Host "First provision: generating client secret for api app $env:API_CLIENT_ID"
+          }
+
+          $secretJson = az ad app credential reset `
+            --id $env:API_CLIENT_ID `
+            --append `
+            --display-name "cicd-managed-$($env:ENV_NAME)" `
+            --years 1 `
+            --output json | ConvertFrom-Json
+
+          $clientSecret = $secretJson.password
+          Write-Host "::add-mask::$clientSecret"
+          $clientSecret | Out-File -FilePath $secretPath -Encoding utf8 -NoNewline
+
+          if ($rotate) {
+            Write-Host "Pruning expired credentials from app registration $env:API_CLIENT_ID..."
+            try {
+              $creds = az ad app credential list --id $env:API_CLIENT_ID --output json | ConvertFrom-Json
+              $now = [DateTimeOffset]::UtcNow
+              $expired = @($creds | Where-Object {
+                $_.keyId -and $_.keyId -ne $secretJson.keyId -and [DateTimeOffset]::Parse($_.endDateTime) -lt $now
+              })
+              foreach ($cred in $expired) {
+                az ad app credential delete --id $env:API_CLIENT_ID --key-id $cred.keyId --output none
+                Write-Host "Deleted expired credential keyId=$($cred.keyId)"
+              }
+              Write-Host 'Expired-credential pruning complete.'
+            }
+            catch {
+              Write-Host 'Could not list or prune credentials — skipping pruning (non-fatal).'
+            }
+          }
+
+      - name: Azure login to workforce tenant for api Key Vault write
+        if: steps.api_secret_check.outputs.should_update == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Store api-client-secret in Key Vault
+        if: steps.api_secret_check.outputs.should_update == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $secretPath = Join-Path $PWD '.api-client-secret'
+          try {
+            $clientSecret = Get-Content -Path $secretPath -Raw
+            Write-Host "::add-mask::$clientSecret"
+            $maxAttempts = 6
+            for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+              az keyvault secret set `
+                --vault-name '${{ steps.web_secret_check.outputs.kv_name }}' `
+                --name api-client-secret `
+                --value $clientSecret `
+                --output none
+              if ($LASTEXITCODE -eq 0) {
+                break
+              }
+
+              if ($attempt -eq $maxAttempts) {
+                throw "Failed to store api-client-secret in Key Vault after $maxAttempts attempts."
+              }
+
+              Write-Host "Key Vault secret set failed (attempt $attempt/$maxAttempts); waiting 15 seconds for RBAC propagation..."
+              Start-Sleep -Seconds 15
+            }
+            Write-Host "api-client-secret stored in Key Vault ${{ steps.web_secret_check.outputs.kv_name }}"
+          }
+          finally {
+            if (Test-Path $secretPath) {
+              Remove-Item $secretPath -Force
+            }
+          }
 
       - name: Summarise deployment outputs
         if: success()
