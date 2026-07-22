@@ -538,8 +538,8 @@ jobs:
                          graphClientId=$env:GRAPH_CLIENT_ID `
                          authClientId=$env:AUTH_CLIENT_ID `
                          tenantId=$env:ENTRA_TENANT_ID `
-                         entraAuthorityUrl="https://$($env:CIAM_SUBDOMAIN).ciamlogin.com/$($env:ENTRA_TENANT_ID)/v2.0" `
-                         webDomain="$($env:CIAM_SUBDOMAIN).onmicrosoft.com"
+                         webDomain="$($env:CIAM_SUBDOMAIN).onmicrosoft.com" `
+                         entraAuthorityUrl="https://$($env:CIAM_SUBDOMAIN).ciamlogin.com/"
 
       - name: Deploy infrastructure
         shell: pwsh
@@ -557,7 +557,7 @@ jobs:
                          graphClientId=$env:GRAPH_CLIENT_ID `
                          authClientId=$env:AUTH_CLIENT_ID `
                          tenantId=$env:ENTRA_TENANT_ID `
-                         entraAuthorityUrl="https://$($env:CIAM_SUBDOMAIN).ciamlogin.com/$($env:ENTRA_TENANT_ID)/v2.0" `
+                         entraAuthorityUrl="https://$($env:CIAM_SUBDOMAIN).ciamlogin.com/" `
                          webDomain="$($env:CIAM_SUBDOMAIN).onmicrosoft.com" `
             --output json | Tee-Object -FilePath deploy-output.json | Out-Null
 
