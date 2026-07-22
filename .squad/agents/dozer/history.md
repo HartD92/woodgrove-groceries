@@ -19,3 +19,5 @@
 
 
 📌 Team update (2026-07-22T18:20:00Z): Post-deploy fixes merged to main. CIAM authority must be built as `https://{subdomain}.ciamlogin.com/{tenantId}/v2.0` with `AzureAd:Domain={subdomain}.onmicrosoft.com`; current deploy variables resolve subdomain `hlacustomer` and tenant ID `1a845386-636a-4d10-a25b-9ece94a1302d`. Public repo directive: keep tenant IDs, subdomains, client IDs, and env-specific values out of committed app/workflow/infra parameter files; source them from GitHub repo variables/secrets at deploy time. Also avoid manual `workflow_dispatch` immediately after merging `.github/workflows/deploy-infra.yml` changes because the push trigger already starts a deploy and concurrent runs can collide with `DeploymentActive`. — decided by David Hart
+
+📌 Team update (2026-07-22T18:49:00Z): CIAM correction: Microsoft.Identity.Web + Entra External ID must use Authority-only subdomain-root `https://{subdomain}.ciamlogin.com/` with no `TenantId`, `Domain`, or `Instance`; workforce-style `/{tenantId}/v2.0` caused `IDW10503` during `/signin-oidc` token redemption. This supersedes the earlier workforce-shaped authority note. — decided by David Hart/Trinity

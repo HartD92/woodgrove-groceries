@@ -12,3 +12,5 @@
 
 📌 Team update (2026-07-21T11:55:23-07:00): ExtID CI/CD now uses a two-identity/two-job split. Trinity root-caused AADSTS70021 and Graph Bicep tenant targeting; Dozer implemented PR #3 at commit c5372ff with workforce ARM deployment plus ExtID Entra provisioning. — decided by David/Coordinator
 📌 Team update (2026-07-21T16:52:42-07:00): Deploy pipeline auth/RBAC lesson: the CI deploy service principal needs Key Vault Secrets Officer on RBAC-enabled Key Vaults, assigned with Bicep `deployer().objectId`, so workflow secret read/write steps can seed `web-client-secret`.
+
+📌 Team update (2026-07-22T18:49:00Z): CIAM correction: Microsoft.Identity.Web + Entra External ID must use Authority-only subdomain-root `https://{subdomain}.ciamlogin.com/` with no `TenantId`, `Domain`, or `Instance`; workforce-style `/{tenantId}/v2.0` caused `IDW10503` during `/signin-oidc` token redemption. — decided by David Hart/Trinity

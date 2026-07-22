@@ -402,6 +402,44 @@ jobs:
           $apiApp = Get-AppRegistrationByAppId -AppId $apiApp.appId -Description "show app registration after API patch: $apiDisplayName"
           $apiSp = Ensure-ServicePrincipal -AppId $apiApp.appId
 
+          $graphApp = Ensure-AppRegistration -DisplayName $graphDisplayName
+          $graphScope = @($graphApp.api.oauth2PermissionScopes | Where-Object { $_.value -eq 'access_as_user' } | Select-Object -First 1)[0]
+          $graphAccessAsUserScopeId = if ($graphScope -and $graphScope.id) { $graphScope.id } else { New-StableGuid -Parts @($envName, 'woodgrove-graph-middleware', 'access_as_user') }
+
+          Invoke-GraphPatch `
+            -Uri "https://graph.microsoft.com/v1.0/applications/$($graphApp.id)" `
+            -Body ([ordered]@{
+              signInAudience = 'AzureADMyOrg'
+              identifierUris = @("api://woodgrove-graph-middleware-$envName")
+              api = [ordered]@{
+                requestedAccessTokenVersion = 2
+                oauth2PermissionScopes = @(
+                  [ordered]@{
+                    id = $graphAccessAsUserScopeId
+                    adminConsentDisplayName = 'Access woodgrove-graph-middleware as the signed-in user'
+                    adminConsentDescription = 'Allows the app to access woodgrove-graph-middleware on behalf of the signed-in user.'
+                    userConsentDisplayName = 'Access woodgrove-graph-middleware'
+                    userConsentDescription = 'Allows this app to access woodgrove-graph-middleware on your behalf.'
+                    value = 'access_as_user'
+                    type = 'User'
+                    isEnabled = $true
+                  }
+                )
+              }
+              requiredResourceAccess = @(
+                [ordered]@{
+                  resourceAppId = $msGraphAppId
+                  resourceAccess = @(
+                    [ordered]@{ id = $graphUserReadWriteAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphGroupReadWriteAllRoleId; type = 'Role' }
+                    [ordered]@{ id = $graphDirectoryReadWriteAllRoleId; type = 'Role' }
+                  )
+                }
+              )
+            })
+          $graphApp = Get-AppRegistrationByAppId -AppId $graphApp.appId -Description "show app registration after graph patch: $graphDisplayName"
+          $graphSp = Ensure-ServicePrincipal -AppId $graphApp.appId
+
           $webApp = Ensure-AppRegistration -DisplayName $webDisplayName
           Invoke-GraphPatch `
             -Uri "https://graph.microsoft.com/v1.0/applications/$($webApp.id)" `
@@ -420,6 +458,10 @@ jobs:
                   resourceAccess = @([ordered]@{ id = $apiAccessAsUserScopeId; type = 'Scope' })
                 }
                 [ordered]@{
+                  resourceAppId = $graphApp.appId
+                  resourceAccess = @([ordered]@{ id = $graphAccessAsUserScopeId; type = 'Scope' })
+                }
+                [ordered]@{
                   resourceAppId = $msGraphAppId
                   resourceAccess = @(
                     [ordered]@{ id = $graphOpenIdScopeId; type = 'Scope' }
@@ -431,25 +473,6 @@ jobs:
             })
           $webApp = Get-AppRegistrationByAppId -AppId $webApp.appId -Description "show app registration after web patch: $webDisplayName"
           $webSp = Ensure-ServicePrincipal -AppId $webApp.appId
-
-          $graphApp = Ensure-AppRegistration -DisplayName $graphDisplayName
-          Invoke-GraphPatch `
-            -Uri "https://graph.microsoft.com/v1.0/applications/$($graphApp.id)" `
-            -Body ([ordered]@{
-              signInAudience = 'AzureADMyOrg'
-              requiredResourceAccess = @(
-                [ordered]@{
-                  resourceAppId = $msGraphAppId
-                  resourceAccess = @(
-                    [ordered]@{ id = $graphUserReadWriteAllRoleId; type = 'Role' }
-                    [ordered]@{ id = $graphGroupReadWriteAllRoleId; type = 'Role' }
-                    [ordered]@{ id = $graphDirectoryReadWriteAllRoleId; type = 'Role' }
-                  )
-                }
-              )
-            })
-          $graphApp = Get-AppRegistrationByAppId -AppId $graphApp.appId -Description "show app registration after graph patch: $graphDisplayName"
-          $graphSp = Ensure-ServicePrincipal -AppId $graphApp.appId
 
           $authApp = Ensure-AppRegistration -DisplayName $authDisplayName
           $authRole = @($authApp.appRoles | Where-Object { $_.value -eq 'CustomAuthenticationExtension.Receive.Payload' } | Select-Object -First 1)[0]
@@ -477,6 +500,7 @@ jobs:
           Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphGroupReadWriteAllRoleId
           Ensure-AppRoleAssignment -PrincipalServicePrincipalId $graphSp.id -ResourceServicePrincipalId $msGraphSp.id -AppRoleId $graphDirectoryReadWriteAllRoleId
           Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $apiSp.id -Scope 'access_as_user'
+          Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $graphSp.id -Scope 'access_as_user'
           Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $webSp.id -ResourceServicePrincipalId $msGraphSp.id -Scope 'openid offline_access profile'
 
           "web_client_id=$($webApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
