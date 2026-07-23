@@ -287,6 +287,59 @@
             </div>
         </div>
 
+        <div id="passkeysContainer" class="hideIfNoAuthenticated">
+            <h2 class="profile-header">Passkeys</h2>
+
+            <div id="passkeysSpinner" class="text-start profile-content">
+                <br>Loading... <br>
+                <div class="spinner-border m-5 text-warning" style="width: 3rem; height: 3rem;" role="status">
+                    <span class="visually-hidden">Loading…</span>
+                </div>
+            </div>
+
+            <div class="text-start profile-content" id="passkeysSection" style="display: none;">
+                <p>
+                    Manage passkeys for phishing-resistant authentication. Passkey registration and deletion require a
+                    recent MFA challenge.
+                </p>
+
+                <div class="mb-3 row">
+                    <div class="col-sm-12">
+                        <button type="button" onclick="registerPasskey()" class="btn header-button mfaFulfilled"
+                            id="registerPasskeyButton" style="margin-right: 20px; width: 170px; display: none;">
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true" id="registerPasskeySpinner"
+                                style="margin-right: 10px; display: none;"></span>
+                            Register passkey
+                        </button>
+                        <button type="button" class="btn header-button mfaRequiredButton" style="margin-right: 20px;"
+                            data-bs-toggle="modal" data-bs-target="#mfaAlert">
+                            Register passkey
+                        </button>
+                    </div>
+                </div>
+
+                <div id="passkeyEmptyState" style="display: none;">
+                    No passkeys registered yet.
+                </div>
+
+                <div class="table-responsive" id="passkeysTableContainer" style="display: none;">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Model</th>
+                                <th>Created</th>
+                                <th>Last used</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="passkeysTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <div id="signInActivityContainer" class="hideIfNoAuthenticated">
             <h2 class="profile-header">Sign-in activity</h2>
             <div class="profile-content">
