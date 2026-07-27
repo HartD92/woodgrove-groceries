@@ -71,8 +71,8 @@ public class DisableAccountController : ControllerBase
         }
         catch (Exception ex)
         {
-            att.ErrorMessage = $"The account cannot be updated due to the following error: {ex.Message}";
             AppInsights.TrackException(_telemetry, ex, "OnPostProfileAsync");
+            att.ErrorMessage = UserFacingError.For(ex, "We couldn't disable your account right now. Please try again in a few moments, or contact customer service if this keeps happening.");
         }
 
         return Ok();

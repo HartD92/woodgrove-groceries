@@ -63,11 +63,13 @@ namespace MyApp.Namespace
             }
             catch (ODataError odataError)
             {
+                AppInsights.TrackException(_telemetry, odataError, "OnPostDeleteAccountAsync");
                 ErrorMessage = $"The account cannot be delete due to the following error: {odataError.Error!.Message} Error code: {odataError.Error.Code}";
             }
             catch (Exception ex)
             {
-                ErrorMessage = $"The account cannot be delete due to the following error: {ex.Message}";
+                AppInsights.TrackException(_telemetry, ex, "OnPostDeleteAccountAsync");
+                ErrorMessage = UserFacingError.For(ex, "We couldn't finish deleting your account right now. Please try again in a few moments, or contact customer service if this keeps happening.");
             }
 
             return;

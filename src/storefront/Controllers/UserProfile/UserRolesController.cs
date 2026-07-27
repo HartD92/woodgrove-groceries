@@ -103,9 +103,8 @@ public class UserRolesController : ControllerBase
         }
         catch (Exception ex)
         {
-            string error = ex.InnerException == null ? ex.Message : ex.InnerException.Message;
-            userRoles.ErrorMessage = $"Can't read the profile due to the following error: {error}";
             AppInsights.TrackException(_telemetry, ex, "GetRolesAndGroupsAsync");
+            userRoles.ErrorMessage = UserFacingError.For(ex, "We couldn't load your account roles and group memberships right now. Please refresh the page and try again.");
         }
 
         return Ok(userRoles);
@@ -197,9 +196,8 @@ public class UserRolesController : ControllerBase
         }
         catch (Exception ex)
         {
-            string error = ex.InnerException == null ? ex.Message : ex.InnerException.Message;
-            userRoles.ErrorMessage = $"Can't read the profile due to the following error: {error}";
             AppInsights.TrackException(_telemetry, ex, "OnPostRolesAsync");
+            userRoles.ErrorMessage = UserFacingError.For(ex, "We couldn't update your account roles and group memberships right now. Please try again in a few moments.");
         }
 
         return Ok(userRoles);
