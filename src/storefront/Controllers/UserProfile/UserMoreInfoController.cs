@@ -96,9 +96,8 @@ public class UserMoreInfoController : ControllerBase
         }
         catch (Exception ex)
         {
-            string error = ex.InnerException == null ? ex.Message : ex.InnerException.Message;
-            userMoreInfo.ErrorMessage = $"Can't read the profile due to the following error: {error}";
             AppInsights.TrackException(_telemetry, ex, "GetRolesAndGroupsAsync");
+            userMoreInfo.ErrorMessage = UserFacingError.For(ex, "We couldn't load your account details right now. Please refresh the page and try again.");
         }
 
         bool StepUpFulfilled = User.Claims.Any(c => c.Type == "acrs" && c.Value == "c1");
@@ -134,9 +133,8 @@ public class UserMoreInfoController : ControllerBase
         }
         catch (Exception ex)
         {
-            string error = ex.InnerException == null ? ex.Message : ex.InnerException.Message;
-            userMoreInfo.ErrorMessage = $"Can't read the authentication methods due to the following error: {error}";
             AppInsights.TrackException(_telemetry, ex, "GetAuthenticationMethodsAsync");
+            userMoreInfo.ErrorMessage = UserFacingError.For(ex, "We couldn't load your sign-in and verification methods right now. Please refresh the page and try again.");
         }
 
         return Ok(userMoreInfo);
