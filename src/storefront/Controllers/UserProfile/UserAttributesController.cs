@@ -110,7 +110,7 @@ public class UserAttributesController : ControllerBase
         }
         catch (MicrosoftIdentityWebChallengeUserException ex)
         {
-            att.ErrorMessage = "Consent is required before the profile can be read. Please sign out, sign in again, and retry the profile page.";
+            att.ErrorMessage = UserFacingError.ForProfilePage(ex, "Consent is required before the profile can be read. Please sign out, sign in again, and retry the profile page.");
             AppInsights.TrackException(_telemetry, ex, "ReadProfileConsent");
         }
         catch (Exception ex)
