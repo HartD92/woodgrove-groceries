@@ -15,14 +15,17 @@ namespace woodgrovedemo.Controllers;
 [Authorize]
 public class PasskeysController : ControllerBase
 {
+    // NOTE: FIDO2 provisioning APIs are in Microsoft Graph beta as of 2026-07 and may change without deprecation notice.
     private const string DefaultGraphApiBaseUrl = "https://graph.microsoft.com/beta";
     private readonly IConfiguration _configuration;
     private readonly TelemetryClient _telemetry;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public PasskeysController(IConfiguration configuration, TelemetryClient telemetry)
+    public PasskeysController(IConfiguration configuration, TelemetryClient telemetry, IHttpClientFactory httpClientFactory)
     {
         _configuration = configuration;
         _telemetry = telemetry;
+        _httpClientFactory = httpClientFactory;
     }
 
     [HttpGet]
@@ -38,29 +41,39 @@ public class PasskeysController : ControllerBase
             return Ok(response);
         }
 
-        using var graphResponse = await SendGraphRequestAsync(HttpMethod.Get, $"users/{userObjectId}/authentication/fido2Methods");
-        string payload = await graphResponse.Content.ReadAsStringAsync();
-        if (!graphResponse.IsSuccessStatusCode)
+        try
         {
-            response.ErrorMessage = $"Can't read passkeys due to the following error: {payload}";
-            return Ok(response);
-        }
-
-        using JsonDocument document = JsonDocument.Parse(payload);
-        if (document.RootElement.TryGetProperty("value", out var values) && values.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in values.EnumerateArray())
+            using var graphResponse = await SendGraphRequestAsync(HttpMethod.Get, $"users/{userObjectId}/authentication/fido2Methods");
+            string payload = await graphResponse.Content.ReadAsStringAsync();
+            if (!graphResponse.IsSuccessStatusCode)
             {
-                response.Passkeys.Add(new PasskeyInfo
-                {
-                    Id = ReadString(item, "id"),
-                    DisplayName = ReadString(item, "displayName"),
-                    Model = ReadString(item, "model"),
-                    PasskeyType = ReadString(item, "passkeyType"),
-                    CreatedDateTime = ReadString(item, "createdDateTime"),
-                    LastUsedDateTime = ReadString(item, "lastUsedDateTime")
-                });
+                _telemetry.TrackTrace($"[Passkeys:List] Graph error: {payload}");
+                string safeMsg = TryExtractGraphErrorMessage(payload) ?? "An unexpected error occurred.";
+                response.ErrorMessage = $"Can't read passkeys: {safeMsg}";
+                return Ok(response);
             }
+
+            using JsonDocument document = JsonDocument.Parse(payload);
+            if (document.RootElement.TryGetProperty("value", out var values) && values.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in values.EnumerateArray())
+                {
+                    response.Passkeys.Add(new PasskeyInfo
+                    {
+                        Id = ReadString(item, "id"),
+                        DisplayName = ReadString(item, "displayName"),
+                        Model = ReadString(item, "model"),
+                        PasskeyType = ReadString(item, "passkeyType"),
+                        CreatedDateTime = ReadString(item, "createdDateTime"),
+                        LastUsedDateTime = ReadString(item, "lastUsedDateTime")
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppInsights.TrackException(_telemetry, ex, "Passkeys:List");
+            response.ErrorMessage = "Can't read passkeys right now. Please try again.";
         }
 
         return Ok(response);
@@ -75,7 +88,6 @@ public class PasskeysController : ControllerBase
             return Ok(new PasskeyOperationResponse { ErrorMessage = errorMessage! });
         }
 
-        string timeout = _configuration.GetSection("PasskeyManagement:ChallengeTimeoutInMinutes").Value ?? "60";
         string? userObjectId = User.GetObjectId();
         if (string.IsNullOrWhiteSpace(userObjectId))
         {
@@ -85,29 +97,48 @@ public class PasskeysController : ControllerBase
             });
         }
 
-        using var graphResponse = await SendGraphRequestAsync(
-            HttpMethod.Get,
-            $"users/{userObjectId}/authentication/fido2Methods/creationOptions(challengeTimeoutInMinutes={timeout})");
-
-        string payload = await graphResponse.Content.ReadAsStringAsync();
-        if (!graphResponse.IsSuccessStatusCode)
+        try
         {
+            // Validate timeout config: must be a positive integer; fall back to 60 if missing or malformed.
+            string rawTimeout = _configuration.GetSection("PasskeyManagement:ChallengeTimeoutInMinutes").Value ?? "60";
+            string timeout = int.TryParse(rawTimeout, out int t) && t > 0 ? t.ToString() : "60";
+
+            using var graphResponse = await SendGraphRequestAsync(
+                HttpMethod.Get,
+                $"users/{userObjectId}/authentication/fido2Methods/creationOptions(challengeTimeoutInMinutes={timeout})");
+
+            string payload = await graphResponse.Content.ReadAsStringAsync();
+            if (!graphResponse.IsSuccessStatusCode)
+            {
+                _telemetry.TrackTrace($"[Passkeys:CreationOptions] Graph error: {payload}");
+                string safeMsg = TryExtractGraphErrorMessage(payload) ?? "An unexpected error occurred.";
+                return Ok(new PasskeyOperationResponse
+                {
+                    ErrorMessage = $"Can't start passkey registration: {safeMsg}"
+                });
+            }
+
+            using JsonDocument document = JsonDocument.Parse(payload);
+            if (document.RootElement.TryGetProperty("publicKey", out JsonElement publicKey))
+            {
+                // Intentionally returns the raw WebAuthn publicKey options object on success so the client
+                // can pass it directly to navigator.credentials.create(). On error this endpoint returns a
+                // PasskeyOperationResponse with errorMessage instead. The client distinguishes the two shapes
+                // by the presence of errorMessage. Do not wrap in a typed envelope without a coordinated
+                // frontend change.
+                return Ok(publicKey.Clone());
+            }
+
             return Ok(new PasskeyOperationResponse
             {
-                ErrorMessage = $"Can't start passkey registration due to the following error: {payload}"
+                ErrorMessage = "Passkey creation options weren't returned by Microsoft Graph."
             });
         }
-
-        using JsonDocument document = JsonDocument.Parse(payload);
-        if (document.RootElement.TryGetProperty("publicKey", out JsonElement publicKey))
+        catch (Exception ex)
         {
-            return Ok(publicKey.Clone());
+            AppInsights.TrackException(_telemetry, ex, "Passkeys:CreationOptions");
+            return Ok(new PasskeyOperationResponse { ErrorMessage = "Can't start passkey registration right now. Please try again." });
         }
-
-        return Ok(new PasskeyOperationResponse
-        {
-            ErrorMessage = "Passkey creation options weren't returned by Microsoft Graph."
-        });
     }
 
     [HttpPost("register")]
@@ -128,33 +159,43 @@ public class PasskeysController : ControllerBase
             });
         }
 
-        string displayNamePrefix = _configuration.GetSection("PasskeyManagement:DisplayNamePrefix").Value ?? "passkey";
-        string displayName = string.IsNullOrWhiteSpace(request.DisplayName)
-            ? $"{displayNamePrefix}_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}"
-            : request.DisplayName;
-
-        var payloadJson = JsonSerializer.Serialize(new
+        try
         {
-            publicKeyCredential = request.PublicKeyCredential,
-            displayName
-        });
+            string displayNamePrefix = _configuration.GetSection("PasskeyManagement:DisplayNamePrefix").Value ?? "passkey";
+            string displayName = string.IsNullOrWhiteSpace(request.DisplayName)
+                ? $"{displayNamePrefix}_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}"
+                : request.DisplayName;
 
-        using var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
-        using var graphResponse = await SendGraphRequestAsync(
-            HttpMethod.Post,
-            $"users/{userObjectId}/authentication/fido2Methods",
-            content);
-
-        string payload = await graphResponse.Content.ReadAsStringAsync();
-        if (!graphResponse.IsSuccessStatusCode)
-        {
-            return Ok(new PasskeyOperationResponse
+            var payloadJson = JsonSerializer.Serialize(new
             {
-                ErrorMessage = $"Can't register passkey due to the following error: {payload}"
+                publicKeyCredential = request.PublicKeyCredential,
+                displayName
             });
-        }
 
-        return Ok(new PasskeyOperationResponse());
+            using var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+            using var graphResponse = await SendGraphRequestAsync(
+                HttpMethod.Post,
+                $"users/{userObjectId}/authentication/fido2Methods",
+                content);
+
+            string payload = await graphResponse.Content.ReadAsStringAsync();
+            if (!graphResponse.IsSuccessStatusCode)
+            {
+                _telemetry.TrackTrace($"[Passkeys:Register] Graph error: {payload}");
+                string safeMsg = TryExtractGraphErrorMessage(payload) ?? "An unexpected error occurred.";
+                return Ok(new PasskeyOperationResponse
+                {
+                    ErrorMessage = $"Can't register passkey: {safeMsg}"
+                });
+            }
+
+            return Ok(new PasskeyOperationResponse());
+        }
+        catch (Exception ex)
+        {
+            AppInsights.TrackException(_telemetry, ex, "Passkeys:Register");
+            return Ok(new PasskeyOperationResponse { ErrorMessage = "Can't register passkey right now. Please try again." });
+        }
     }
 
     [HttpDelete("{id}")]
@@ -175,20 +216,30 @@ public class PasskeysController : ControllerBase
             });
         }
 
-        using var graphResponse = await SendGraphRequestAsync(
-            HttpMethod.Delete,
-            $"users/{userObjectId}/authentication/fido2Methods/{Uri.EscapeDataString(id)}");
-
-        string payload = await graphResponse.Content.ReadAsStringAsync();
-        if (!graphResponse.IsSuccessStatusCode)
+        try
         {
-            return Ok(new PasskeyOperationResponse
-            {
-                ErrorMessage = $"Can't delete passkey due to the following error: {payload}"
-            });
-        }
+            using var graphResponse = await SendGraphRequestAsync(
+                HttpMethod.Delete,
+                $"users/{userObjectId}/authentication/fido2Methods/{Uri.EscapeDataString(id)}");
 
-        return Ok(new PasskeyOperationResponse());
+            string payload = await graphResponse.Content.ReadAsStringAsync();
+            if (!graphResponse.IsSuccessStatusCode)
+            {
+                _telemetry.TrackTrace($"[Passkeys:Delete] Graph error: {payload}");
+                string safeMsg = TryExtractGraphErrorMessage(payload) ?? "An unexpected error occurred.";
+                return Ok(new PasskeyOperationResponse
+                {
+                    ErrorMessage = $"Can't delete passkey: {safeMsg}"
+                });
+            }
+
+            return Ok(new PasskeyOperationResponse());
+        }
+        catch (Exception ex)
+        {
+            AppInsights.TrackException(_telemetry, ex, "Passkeys:Delete");
+            return Ok(new PasskeyOperationResponse { ErrorMessage = "Can't delete passkey right now. Please try again." });
+        }
     }
 
     private bool IsMfaChallengeFresh(out string? errorMessage)
@@ -218,7 +269,8 @@ public class PasskeysController : ControllerBase
         string graphApiBaseUrl = _configuration.GetSection("PasskeyManagement:GraphApiBaseUrl").Value ?? DefaultGraphApiBaseUrl;
         string accessToken = await MsalAccessTokenHandler.AcquireToken(_configuration);
 
-        using var client = new HttpClient();
+        // IHttpClientFactory manages connection pooling; do not dispose the client.
+        var client = _httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(method, $"{graphApiBaseUrl.TrimEnd('/')}/{graphPath}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         request.Content = content;
@@ -231,5 +283,24 @@ public class PasskeysController : ControllerBase
         return element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? string.Empty
             : string.Empty;
+    }
+
+    private static string? TryExtractGraphErrorMessage(string payload)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (doc.RootElement.TryGetProperty("error", out var errorObj) &&
+                errorObj.TryGetProperty("message", out var msg) &&
+                msg.ValueKind == JsonValueKind.String)
+            {
+                return msg.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            // Payload is not valid JSON; fall through to return null.
+        }
+        return null;
     }
 }
