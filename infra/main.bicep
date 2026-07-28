@@ -252,7 +252,6 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'GraphApiMiddleware__BaseUrl',                   value: 'api://woodgrove-graph-middleware-${environmentName}' }
       { name: 'GraphApiMiddleware__Scopes__0',                 value: 'access_as_user' }
       { name: 'GraphApiMiddleware__Endpoint',                  value: 'https://${graphAppName}.azurewebsites.net/profile' }
-      { name: 'AzureCommunicationServices__ConnectionString',  value: kvRefAcsConn }
       { name: 'Cloudflare__ZoneId',                            value: cloudflareZoneId }
       { name: 'Cloudflare__ApiSecret',                         value: kvRefCloudflare }
       { name: 'AppRoles__PrincipalId',                         value: appRolesPrincipalId }
@@ -283,7 +282,8 @@ module apiApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__ClientCredentials__0__ClientSecret',   value: kvRefApiSecret }
       { name: 'WoodgroveGroceriesDownstreamApi__BaseUrl',      value: 'api://${resolvedPaymentApiClientId}' }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING',         value: kvRefAppInsights }
-      { name: 'AzureCommunicationServices__ConnectionString',  value: kvRefAcsConn }
+      { name: 'AppSettings__Email__ConnectionString',          value: kvRefAcsConn }
+      { name: 'AppSettings__Email__Sender',                    value: acs.outputs.senderAddress }
     ]
   }
 }
@@ -371,6 +371,16 @@ module acs 'modules/communicationServices.bicep' = {
     emailServiceName: emailSvcName
     dataLocation: acsDataLocation
     tags: allTags
+  }
+}
+
+module acsConnectionStringSecret 'modules/keyVaultSecret.bicep' = {
+  name: 'acsConnectionStringSecret'
+  scope: rg
+  params: {
+    keyVaultName: keyVault.outputs.name
+    secretName: 'acs-connection-string'
+    secretValue: acs.outputs.primaryConnectionString
   }
 }
 
