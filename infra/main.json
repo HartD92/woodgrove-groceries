@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "11073478032137763991"
+      "templateHash": "4077563666124781818"
     }
   },
   "parameters": {
@@ -946,7 +946,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "8911377546284001923"
+              "templateHash": "16364246561078071717"
             }
           },
           "parameters": {
@@ -1027,7 +1027,7 @@
               }
             ],
             "hasCustomHostName": "[not(empty(parameters('customHostName')))]",
-            "managedCertificateName": "[format('cert-{0}', replace(parameters('customHostName'), '.', '-'))]"
+            "managedCertificateName": "[format('{0}-{1}', parameters('customHostName'), parameters('name'))]"
           },
           "resources": [
             {
@@ -1064,7 +1064,10 @@
               "properties": {
                 "serverFarmId": "[parameters('appServicePlanId')]",
                 "canonicalName": "[parameters('customHostName')]"
-              }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
             },
             {
               "condition": "[variables('hasCustomHostName')]",
@@ -1190,7 +1193,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "8911377546284001923"
+              "templateHash": "16364246561078071717"
             }
           },
           "parameters": {
@@ -1271,7 +1274,7 @@
               }
             ],
             "hasCustomHostName": "[not(empty(parameters('customHostName')))]",
-            "managedCertificateName": "[format('cert-{0}', replace(parameters('customHostName'), '.', '-'))]"
+            "managedCertificateName": "[format('{0}-{1}', parameters('customHostName'), parameters('name'))]"
           },
           "resources": [
             {
@@ -1308,7 +1311,10 @@
               "properties": {
                 "serverFarmId": "[parameters('appServicePlanId')]",
                 "canonicalName": "[parameters('customHostName')]"
-              }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
             },
             {
               "condition": "[variables('hasCustomHostName')]",
@@ -1427,7 +1433,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "8911377546284001923"
+              "templateHash": "16364246561078071717"
             }
           },
           "parameters": {
@@ -1508,7 +1514,7 @@
               }
             ],
             "hasCustomHostName": "[not(empty(parameters('customHostName')))]",
-            "managedCertificateName": "[format('cert-{0}', replace(parameters('customHostName'), '.', '-'))]"
+            "managedCertificateName": "[format('{0}-{1}', parameters('customHostName'), parameters('name'))]"
           },
           "resources": [
             {
@@ -1545,7 +1551,10 @@
               "properties": {
                 "serverFarmId": "[parameters('appServicePlanId')]",
                 "canonicalName": "[parameters('customHostName')]"
-              }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
             },
             {
               "condition": "[variables('hasCustomHostName')]",
@@ -1651,7 +1660,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "8911377546284001923"
+              "templateHash": "16364246561078071717"
             }
           },
           "parameters": {
@@ -1732,7 +1741,7 @@
               }
             ],
             "hasCustomHostName": "[not(empty(parameters('customHostName')))]",
-            "managedCertificateName": "[format('cert-{0}', replace(parameters('customHostName'), '.', '-'))]"
+            "managedCertificateName": "[format('{0}-{1}', parameters('customHostName'), parameters('name'))]"
           },
           "resources": [
             {
@@ -1769,7 +1778,10 @@
               "properties": {
                 "serverFarmId": "[parameters('appServicePlanId')]",
                 "canonicalName": "[parameters('customHostName')]"
-              }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
             },
             {
               "condition": "[variables('hasCustomHostName')]",
