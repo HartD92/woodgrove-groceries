@@ -44,6 +44,7 @@ $(document).ready(function () {
             linear: false,
             animation: true
         })
+        stepper.to(1);
 
         // Add the links to the pages
         if ($('#stepNavigator').length > 0) {
