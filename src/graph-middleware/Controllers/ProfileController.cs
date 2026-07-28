@@ -101,14 +101,15 @@ public class ProfileController : ControllerBase
         }
         catch (ODataError odataError)
         {
+            _logger.LogError(odataError, "OnPostProfileAsync: Microsoft Graph returned an error while updating the user profile.");
             att.ErrorMessage = $"The account cannot be updated due to the following error: {odataError.Error!.Message} Error code: {odataError.Error.Code}";
-            //TrackException(odataError, "OnPostProfileAsync");
         }
         catch (Exception ex)
         {
-            string error = ex.InnerException == null ? ex.Message : ex.InnerException.Message;
-            att.ErrorMessage = $"The account cannot be updated due to the following error: {error}";
-            //TrackException(ex, "OnPostProfileAsync");
+            // Full diagnostics go to the server log; the caller only gets a generic message because
+            // exception text can carry tenant IDs, client IDs, authority URLs and internal host names.
+            _logger.LogError(ex, "OnPostProfileAsync: Unexpected error while updating the user profile.");
+            att.ErrorMessage = "Your profile couldn't be updated right now. Please try again in a few moments.";
         }
 
         return Ok(att);

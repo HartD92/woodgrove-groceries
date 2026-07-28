@@ -287,6 +287,71 @@
             </div>
         </div>
 
+        <div id="passkeysContainer" class="hideIfNoAuthenticated">
+            <h2 class="profile-header">Passkeys</h2>
+
+            <div id="passkeysSpinner" class="text-start profile-content">
+                <br>Loading... <br>
+                <div class="spinner-border m-5 text-warning" style="width: 3rem; height: 3rem;" role="status">
+                    <span class="visually-hidden">Loading…</span>
+                </div>
+            </div>
+
+            <div class="text-start profile-content" id="passkeysSection" style="display: none;">
+                <p>
+                    A passkey lets you sign in using your device's fingerprint, face, or PIN — no password needed.
+                    Manage passkeys for phishing-resistant authentication. Passkey registration and deletion require a
+                    recent MFA challenge.
+                </p>
+
+                <!-- maxlength="64": Graph does not document a character limit for
+                     fido2Methods displayName; 64 is a conservative default consistent
+                     with typical Entra display-name lengths. -->
+                <div class="mb-3 row mfaFulfilled" style="display: none;">
+                    <label for="inputPasskeyName" class="col-sm-2 col-form-label">Passkey name</label>
+                    <div class="col-sm-5">
+                        <input type="text" class="form-control" id="inputPasskeyName" maxlength="64">
+                        <div class="form-text">Optional. Give this passkey a name you'll recognize, like "Work laptop" or "iPhone". This name can't be changed later.</div>
+                    </div>
+                </div>
+
+                <div class="mb-3 row">
+                    <div class="col-sm-12">
+                        <button type="button" onclick="registerPasskey()" class="btn header-button mfaFulfilled"
+                            id="registerPasskeyButton" style="margin-right: 20px; width: 170px; display: none;">
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true" id="registerPasskeySpinner"
+                                style="margin-right: 10px; display: none;"></span>
+                            Register passkey
+                        </button>
+                        <button type="button" class="btn header-button mfaRequiredButton" style="margin-right: 20px;"
+                            data-bs-toggle="modal" data-bs-target="#mfaAlert">
+                            Register passkey
+                        </button>
+                    </div>
+                </div>
+
+                <div id="passkeyEmptyState" style="display: none;">
+                    No passkeys registered yet.
+                </div>
+
+                <div class="table-responsive" id="passkeysTableContainer" style="display: none;">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th scope="col">Name</th>
+                                <th scope="col">Type</th>
+                                <th scope="col">Model</th>
+                                <th scope="col">Created</th>
+                                <th scope="col">Last used</th>
+                                <th scope="col"><span class="visually-hidden">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="passkeysTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <div id="signInActivityContainer" class="hideIfNoAuthenticated">
             <h2 class="profile-header">Sign-in activity</h2>
             <div class="profile-content">

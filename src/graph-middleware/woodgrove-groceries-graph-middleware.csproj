@@ -13,6 +13,13 @@
     <PackageReference Include="Microsoft.Identity.Web" Version="3.14.1" />
     <PackageReference Include="Microsoft.Identity.Web.DownstreamApi" Version="3.14.1" />
     <PackageReference Include="Microsoft.Identity.Web.GraphServiceClient" Version="3.14.1" />
+    <!-- Transitive override: Microsoft.Graph 5.x resolves Microsoft.Kiota.Abstractions 1.17.1,
+         which carries GHSA-7j59-v9qr-6fq9 (high severity) — the Kiota redirect handler fails to
+         strip Cookie and Proxy-Authorization headers on cross-host/scheme 3xx redirects.
+         Fixed in Kiota 1.22.0. Remove these pins once Microsoft.Graph ships a version that
+         naturally resolves Kiota >= 1.22.0. -->
+    <PackageReference Include="Microsoft.Kiota.Abstractions" Version="1.22.1" />
+    <PackageReference Include="Microsoft.Kiota.Http.HttpClientLibrary" Version="1.22.1" />
   </ItemGroup>
 
 </Project>

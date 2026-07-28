@@ -1,4 +1,4 @@
-var disableAlert, signInAlert, mfaFulfilled, verificationAlert;
+var disableAlert, signInAlert, mfaAlert, mfaFulfilled, verificationAlert;
 
 $(document).ready(function () {
 
@@ -7,13 +7,14 @@ $(document).ready(function () {
     mfaAlert = new bootstrap.Modal(document.getElementById('mfaAlert'), { keyboard: false });
     verificationAlert = new bootstrap.Modal(document.getElementById('verificationAlert'), { keyboard: false });
 
+    // Check if MFA requirement has been fullfilled
+    mfaFulfilled = ($("#MfaFulfilled").length == 1)
+
     // Get user profile
     getUserAttributes();
     getUserRoles();
     getUserMoreInfo();
-
-    // Check if MFA requirement has been fullfilled
-    mfaFulfilled = ($("#MfaFulfilled").length == 1)
+    getPasskeys();
 
     // Enable or disable the profile attributes
     $("#inputCity").prop("disabled", !mfaFulfilled)
@@ -373,4 +374,256 @@ function verifyCode() {
             $("#verificationError").text(error);
         }
     });
-}             
+}
+
+function showProfileError(message) {
+    $("#errorMessage").text(message);
+    $("#errorMessageContainer").show();
+}
+
+function clearProfileError() {
+    $("#errorMessageContainer").hide();
+    $("#errorMessage").text("");
+}
+
+function getPasskeys() {
+    $.ajax({
+        url: "/api/passkeys",
+        success: function (result) {
+            $("#passkeysSpinner").hide();
+            $("#passkeysSection").show();
+
+            if (result.errorMessage) {
+                showProfileError(result.errorMessage);
+                $("#passkeyEmptyState").show();
+                $("#passkeysTableContainer").hide();
+                return;
+            }
+
+            renderPasskeys(result.passkeys || []);
+        },
+        error: function (xhr, status, error) {
+            $("#passkeysSpinner").hide();
+            $("#passkeysSection").show();
+            showProfileError(error);
+        }
+    });
+}
+
+function renderPasskeys(passkeys) {
+    const body = $("#passkeysTableBody");
+    body.empty();
+
+    if (!passkeys || passkeys.length === 0) {
+        $("#passkeyEmptyState").show();
+        $("#passkeysTableContainer").hide();
+        return;
+    }
+
+    $("#passkeyEmptyState").hide();
+    $("#passkeysTableContainer").show();
+
+    for (const passkey of passkeys) {
+        const row = $("<tr></tr>");
+        row.append(`<td>${escapeHtml(passkey.displayName || "")}</td>`);
+        row.append(`<td>${escapeHtml(passkey.passkeyType || "")}</td>`);
+        row.append(`<td>${escapeHtml(passkey.model || "")}</td>`);
+        row.append(`<td>${escapeHtml(formatDateTime(passkey.createdDateTime))}</td>`);
+        row.append(`<td>${escapeHtml(formatDateTime(passkey.lastUsedDateTime))}</td>`);
+
+        if (mfaFulfilled) {
+            const deleteBtn = $('<button type="button" class="btn btn-sm btn-outline-danger">Delete</button>');
+            const passkeyId = passkey.id || "";
+            const displayName = passkey.displayName || "";
+            deleteBtn.on("click", function () {
+                deletePasskey(passkeyId, displayName, passkeys.length, $(this));
+            });
+            row.append($("<td></td>").append(deleteBtn));
+        } else {
+            row.append(`<td><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#mfaAlert">Delete</button></td>`);
+        }
+
+        body.append(row);
+    }
+}
+
+async function registerPasskey() {
+    clearProfileError();
+
+    if (!window.PublicKeyCredential || !navigator.credentials) {
+        showProfileError("This browser doesn't support passkeys. Use a modern browser over HTTPS.");
+        return;
+    }
+    if (!window.isSecureContext) {
+        showProfileError("Passkey registration requires a secure connection (HTTPS).");
+        return;
+    }
+
+    $("#registerPasskeyButton").prop("disabled", true);
+    $("#registerPasskeySpinner").show();
+
+    try {
+        const creationOptionsResponse = await fetch("/api/passkeys/creation-options");
+        if (!creationOptionsResponse.ok) {
+            throw new Error(`Server error: ${creationOptionsResponse.status}`);
+        }
+        const creationOptions = await creationOptionsResponse.json();
+
+        if (creationOptions.errorMessage) {
+            showProfileError(creationOptions.errorMessage);
+            return;
+        }
+
+        const publicKey = buildPublicKeyOptions(creationOptions);
+        const credential = await navigator.credentials.create({ publicKey: publicKey });
+
+        const displayName = $("#inputPasskeyName").val().trim();
+
+        // The Graph beta webauthnPublicKeyCredential type declares only id, response, and
+        // clientExtensionResults — rawId and type are WebAuthn-spec members not declared on
+        // this OData type; Graph rejects undeclared properties with a 400.
+        const payload = {
+            publicKeyCredential: {
+                id: credential.id,
+                response: {
+                    attestationObject: bufferToBase64url(credential.response.attestationObject),
+                    clientDataJSON: bufferToBase64url(credential.response.clientDataJSON)
+                }
+            }
+        };
+        if (displayName) {
+            payload.displayName = displayName;
+        }
+
+        const registerResponse = await fetch("/api/passkeys/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (!registerResponse.ok) {
+            throw new Error(`Server error: ${registerResponse.status}`);
+        }
+
+        const registerResult = await registerResponse.json();
+        if (registerResult.errorMessage) {
+            showProfileError(registerResult.errorMessage);
+            return;
+        }
+
+        $("#inputPasskeyName").val("");
+        getPasskeys();
+    } catch (error) {
+        showProfileError(error.message || "Passkey registration failed.");
+    } finally {
+        $("#registerPasskeyButton").prop("disabled", false);
+        $("#registerPasskeySpinner").hide();
+    }
+}
+
+async function deletePasskey(passkeyId, displayName, totalCount, $button) {
+    clearProfileError();
+    if (!passkeyId) {
+        return;
+    }
+
+    const name = displayName || "this passkey";
+    let message = `Delete passkey "${name}"? This cannot be undone.`;
+    if (totalCount === 1) {
+        message = `⚠️ This is your only passkey. Deleting it removes passkey sign-in from your account entirely.\n\n${message}`;
+    }
+
+    if (!confirm(message)) {
+        return;
+    }
+
+    $button.prop("disabled", true);
+    try {
+        const response = await fetch(`/api/passkeys/${encodeURIComponent(passkeyId)}`, {
+            method: "DELETE"
+        });
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+        }
+        const result = await response.json();
+        if (result.errorMessage) {
+            showProfileError(result.errorMessage);
+            return;
+        }
+
+        getPasskeys();
+    } catch (error) {
+        showProfileError(error.message || "Passkey deletion failed.");
+    } finally {
+        $button.prop("disabled", false);
+    }
+}
+
+function buildPublicKeyOptions(creationOptions) {
+    const excludeCredentials = (creationOptions.excludeCredentials || []).map(c => ({
+        ...c,
+        id: decodeGraphCredentialId(c.id)
+    }));
+
+    return {
+        challenge: base64urlToBuffer(creationOptions.challenge),
+        rp: creationOptions.rp,
+        user: {
+            ...creationOptions.user,
+            id: base64urlToBuffer(creationOptions.user.id)
+        },
+        pubKeyCredParams: creationOptions.pubKeyCredParams,
+        timeout: creationOptions.timeout,
+        excludeCredentials: excludeCredentials,
+        authenticatorSelection: creationOptions.authenticatorSelection,
+        attestation: creationOptions.attestation
+    };
+}
+
+function base64urlToBuffer(base64url) {
+    const padding = "=".repeat((4 - (base64url.length % 4)) % 4);
+    const base64 = (base64url + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+function bufferToBase64url(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function decodeGraphCredentialId(id) {
+    // Microsoft Graph returns excludeCredentials[].id as a base64url string,
+    // the same encoding used for challenge and user.id. Decode it consistently
+    // so credential IDs ending in a digit aren't corrupted.
+    return base64urlToBuffer(id);
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+}
+
+function formatDateTime(value) {
+    if (!value) {
+        return "";
+    }
+
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+        return value;
+    }
+
+    return date.toLocaleString();
+}

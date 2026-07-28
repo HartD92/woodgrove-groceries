@@ -110,14 +110,13 @@ public class UserAttributesController : ControllerBase
         }
         catch (MicrosoftIdentityWebChallengeUserException ex)
         {
-            att.ErrorMessage = "Consent is required before the profile can be read. Please sign out, sign in again, and retry the profile page.";
+            att.ErrorMessage = UserFacingError.ForProfilePage(ex, "Consent is required before the profile can be read. Please sign out, sign in again, and retry the profile page.");
             AppInsights.TrackException(_telemetry, ex, "ReadProfileConsent");
         }
         catch (Exception ex)
         {
-            string error = ex.InnerException == null ? ex.Message : ex.InnerException.Message;
-            att.ErrorMessage = $"Can't read the profile due to the following error: {error}";
             AppInsights.TrackException(_telemetry, ex, "ReadProfile");
+            att.ErrorMessage = UserFacingError.ForProfilePage(ex, "We couldn't load your profile details right now. Please refresh the page and try again.");
         }
 
         return Ok(att);
@@ -187,9 +186,8 @@ public class UserAttributesController : ControllerBase
         }
         catch (Exception ex)
         {
-            string error = ex.InnerException == null ? ex.Message : ex.InnerException.Message;
-            att.ErrorMessage = $"The account cannot be updated due to the following error: {error}";
             AppInsights.TrackException(_telemetry, ex, "OnPostProfileAsync");
+            att.ErrorMessage = UserFacingError.For(ex, "We couldn't save your profile changes right now. Please try again in a few moments.");
         }
 
         return Ok(att);
