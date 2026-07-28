@@ -37,6 +37,9 @@ param paymentApiClientId = '<payment-api-client-id>'  // woodgrove-groceries-pay
 // --- Domain & authority ---
 param webDomain        = 'groceries.customers.hartlabs.info'
 param entraCustomDomainHost = 'customers.hartlabs.info'
+param entraOriginHost = 'hlacustomer.ciamlogin.com'
+param frontDoorProfileName = '' // empty = generated afd-woodgrove-<env>-<suffix>
+param enableFrontDoorCustomDomainAssociation = false // phase 2: set true after AFD TXT/CNAME validation
 param storefrontCustomHostName = 'groceries.customers.hartlabs.info'
 param enableStorefrontManagedCertificate = false
 

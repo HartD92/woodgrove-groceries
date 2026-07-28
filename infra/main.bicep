@@ -51,6 +51,15 @@ param webDomain string = 'woodgrovedemo.com'
 @description('Entra External ID custom domain host without scheme or path (e.g. customers.hartlabs.info)')
 param entraCustomDomainHost string
 
+@description('Entra External ID CIAM origin host without scheme or path (e.g. hlacustomer.ciamlogin.com)')
+param entraOriginHost string = 'hlacustomer.ciamlogin.com'
+
+@description('Azure Front Door profile name for the Entra External ID custom URL domain. Leave empty for the default generated name.')
+param frontDoorProfileName string = ''
+
+@description('Associate the Entra custom URL domain with the Front Door route. Deploy once with false, add DNS validation records, then redeploy with true.')
+param enableFrontDoorCustomDomainAssociation bool = false
+
 @description('Storefront custom hostname. Requires DNS verification before deployment when non-empty.')
 param storefrontCustomHostName string = ''
 
@@ -114,6 +123,7 @@ var webAppName       = 'app-woodgrove-web-${environmentName}-${uniqueSuffix}'
 var apiAppName       = 'app-woodgrove-api-${environmentName}-${uniqueSuffix}'
 var graphAppName     = 'app-woodgrove-graph-${environmentName}-${uniqueSuffix}'
 var authAppName      = 'app-woodgrove-auth-${environmentName}-${uniqueSuffix}'
+var frontDoorEndpointName = 'afd-wg-${environmentName}-${uniqueSuffix}'
 
 // Key Vault names: 3-24 chars, globally unique
 // 'kv-wg-<env>-<suffix>' keeps it within 24 chars even for long env names
@@ -129,6 +139,8 @@ var appInsightsName  = 'appi-woodgrove-${environmentName}'
 var acsName          = 'acs-woodgrove-${environmentName}-${uniqueSuffix}'
 var emailSvcName     = 'email-woodgrove-${environmentName}-${uniqueSuffix}'
 var entraAuthorityUrl = 'https://${entraCustomDomainHost}/${tenantId}/v2.0/'
+var entraInstanceUrl = 'https://${entraCustomDomainHost}/'
+var resolvedFrontDoorProfileName = empty(frontDoorProfileName) ? 'afd-woodgrove-${environmentName}-${uniqueSuffix}' : frontDoorProfileName
 
 var allTags = union(tags, {
   environment: environmentName
@@ -193,6 +205,26 @@ resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
   tags: allTags
 }
 
+
+// ============================================================
+// AZURE FRONT DOOR  (Entra External ID custom URL domain)
+// Provides customers.hartlabs.info in front of <tenant>.ciamlogin.com only;
+// storefront traffic remains bound directly to App Service.
+// ============================================================
+
+module frontDoor 'modules/frontDoor.bicep' = {
+  name: 'frontDoor'
+  scope: rg
+  params: {
+    profileName: resolvedFrontDoorProfileName
+    endpointName: frontDoorEndpointName
+    customDomainHost: entraCustomDomainHost
+    entraOriginHost: entraOriginHost
+    enableCustomDomainAssociation: enableFrontDoorCustomDomainAssociation
+    tags: allTags
+  }
+}
+
 // ============================================================
 // MONITORING  (Log Analytics + Application Insights)
 // No external dependencies — deploy first.
@@ -249,6 +281,7 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__TenantId',                            value: tenantId }
       { name: 'AzureAd__ClientId',                            value: resolvedWebClientId }
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
+      { name: 'AzureAd__Instance',                            value: entraInstanceUrl }
       { name: 'AzureAd__ClientCredentials__0__SourceType',     value: 'ClientSecret' }
       { name: 'AzureAd__ClientCredentials__0__ClientSecret',   value: kvRefWebSecret }
       { name: 'MicrosoftGraph__TenantId',                      value: tenantId }
@@ -289,6 +322,7 @@ module apiApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__TenantId',                            value: tenantId }
       { name: 'AzureAd__ClientId',                            value: resolvedApiClientId }
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
+      { name: 'AzureAd__Instance',                            value: entraInstanceUrl }
       { name: 'AzureAd__ClientCredentials__0__SourceType',     value: 'ClientSecret' }
       { name: 'AzureAd__ClientCredentials__0__ClientSecret',   value: kvRefApiSecret }
       { name: 'WoodgroveGroceriesDownstreamApi__BaseUrl',      value: 'api://${resolvedPaymentApiClientId}' }
@@ -314,6 +348,7 @@ module graphApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__TenantId',          value: tenantId }
       { name: 'AzureAd__ClientId',          value: resolvedGraphClientId }
       { name: 'AzureAd__Authority',         value: entraAuthorityUrl }
+      { name: 'AzureAd__Instance',          value: entraInstanceUrl }
       { name: 'MicrosoftGraph__TenantId',   value: tenantId }
       { name: 'MicrosoftGraph__ClientId',   value: resolvedGraphClientId }
       { name: 'MicrosoftGraph__ClientSecret', value: kvRefGraphSecret }
@@ -341,6 +376,7 @@ module authApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__TenantId',          value: tenantId }
       { name: 'AzureAd__ClientId',          value: resolvedAuthClientId }
       { name: 'AzureAd__Authority',         value: entraAuthorityUrl }
+      { name: 'AzureAd__Instance',          value: entraInstanceUrl }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: kvRefAppInsights }
     ]
   }
@@ -409,6 +445,9 @@ output keyVaultName       string = keyVault.outputs.name
 output keyVaultUri        string = keyVault.outputs.uri
 output appInsightsName    string = monitoring.outputs.appInsightsName
 output acsResourceName    string = acs.outputs.name
+output frontDoorEndpointHostName string = frontDoor.outputs.endpointHostName
+output frontDoorCustomDomainValidationToken string = frontDoor.outputs.customDomainValidationToken
+output frontDoorCustomDomainAssociationEnabled bool = frontDoor.outputs.customDomainAssociationEnabled
 
 // Client IDs — either from Entra module (provisionEntraApps=true) or input params
 output resolvedWebClientId   string = resolvedWebClientId

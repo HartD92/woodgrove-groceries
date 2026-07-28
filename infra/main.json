@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "4077563666124781818"
+      "templateHash": "14247086334168715125"
     }
   },
   "parameters": {
@@ -73,6 +73,27 @@
       "type": "string",
       "metadata": {
         "description": "Entra External ID custom domain host without scheme or path (e.g. customers.hartlabs.info)"
+      }
+    },
+    "entraOriginHost": {
+      "type": "string",
+      "defaultValue": "hlacustomer.ciamlogin.com",
+      "metadata": {
+        "description": "Entra External ID CIAM origin host without scheme or path (e.g. hlacustomer.ciamlogin.com)"
+      }
+    },
+    "frontDoorProfileName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Azure Front Door profile name for the Entra External ID custom URL domain. Leave empty for the default generated name."
+      }
+    },
+    "enableFrontDoorCustomDomainAssociation": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Associate the Entra custom URL domain with the Front Door route. Deploy once with false, add DNS validation records, then redeploy with true."
       }
     },
     "storefrontCustomHostName": {
@@ -175,6 +196,7 @@
     "apiAppName": "[format('app-woodgrove-api-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
     "graphAppName": "[format('app-woodgrove-graph-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
     "authAppName": "[format('app-woodgrove-auth-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
+    "frontDoorEndpointName": "[format('afd-wg-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
     "kvName": "[format('kv-wg-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
     "kvBaseUri": "[format('https://{0}{1}/', variables('kvName'), environment().suffixes.keyvaultDns)]",
     "logWorkspaceName": "[format('log-woodgrove-{0}', parameters('environmentName'))]",
@@ -182,6 +204,8 @@
     "acsName": "[format('acs-woodgrove-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
     "emailSvcName": "[format('email-woodgrove-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
     "entraAuthorityUrl": "[format('https://{0}/{1}/v2.0/', parameters('entraCustomDomainHost'), parameters('tenantId'))]",
+    "entraInstanceUrl": "[format('https://{0}/', parameters('entraCustomDomainHost'))]",
+    "resolvedFrontDoorProfileName": "[if(empty(parameters('frontDoorProfileName')), format('afd-woodgrove-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix')), parameters('frontDoorProfileName'))]",
     "allTags": "[union(parameters('tags'), createObject('environment', parameters('environmentName'), 'project', 'woodgrove-groceries', 'managedBy', 'bicep', 'SecurityControl', 'Ignore'))]",
     "kvRefAppInsights": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/appinsights-connection-string/)', variables('kvBaseUri'))]",
     "kvRefAcsConn": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/acs-connection-string/)', variables('kvBaseUri'))]",
@@ -578,6 +602,235 @@
         "rg"
       ]
     },
+    "frontDoor": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "frontDoor",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "profileName": {
+            "value": "[variables('resolvedFrontDoorProfileName')]"
+          },
+          "endpointName": {
+            "value": "[variables('frontDoorEndpointName')]"
+          },
+          "customDomainHost": {
+            "value": "[parameters('entraCustomDomainHost')]"
+          },
+          "entraOriginHost": {
+            "value": "[parameters('entraOriginHost')]"
+          },
+          "enableCustomDomainAssociation": {
+            "value": "[parameters('enableFrontDoorCustomDomainAssociation')]"
+          },
+          "tags": {
+            "value": "[variables('allTags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "11997739310808539244"
+            }
+          },
+          "parameters": {
+            "profileName": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure Front Door profile resource name"
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "global",
+              "metadata": {
+                "description": "Azure region. Azure Front Door profiles are global resources; this is retained for module consistency."
+              }
+            },
+            "endpointName": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure Front Door endpoint name. This becomes <endpointName>.azurefd.net."
+              }
+            },
+            "customDomainHost": {
+              "type": "string",
+              "metadata": {
+                "description": "Entra External ID custom URL domain host without scheme or path (e.g. customers.hartlabs.info)"
+              }
+            },
+            "entraOriginHost": {
+              "type": "string",
+              "metadata": {
+                "description": "Entra External ID CIAM origin host without scheme or path (e.g. contoso.ciamlogin.com)"
+              }
+            },
+            "enableCustomDomainAssociation": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "When true, associates the validated custom domain with the Front Door route. Deploy once with false, add DNS validation records, then redeploy with true."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags"
+              }
+            }
+          },
+          "variables": {
+            "originGroupName": "og-entra-external-id",
+            "originName": "origin-entra-external-id",
+            "routeName": "route-entra-external-id",
+            "customDomainName": "[replace(parameters('customDomainHost'), '.', '-')]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Cdn/profiles",
+              "apiVersion": "2024-09-01",
+              "name": "[parameters('profileName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard_AzureFrontDoor"
+              }
+            },
+            {
+              "type": "Microsoft.Cdn/profiles/afdEndpoints",
+              "apiVersion": "2024-09-01",
+              "name": "[format('{0}/{1}', parameters('profileName'), parameters('endpointName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "enabledState": "Enabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Cdn/profiles', parameters('profileName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Cdn/profiles/originGroups",
+              "apiVersion": "2024-09-01",
+              "name": "[format('{0}/{1}', parameters('profileName'), variables('originGroupName'))]",
+              "properties": {
+                "loadBalancingSettings": {
+                  "sampleSize": 4,
+                  "successfulSamplesRequired": 3,
+                  "additionalLatencyInMilliseconds": 50
+                },
+                "healthProbeSettings": {
+                  "probePath": "/",
+                  "probeRequestType": "HEAD",
+                  "probeProtocol": "Https",
+                  "probeIntervalInSeconds": 100
+                },
+                "sessionAffinityState": "Disabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Cdn/profiles', parameters('profileName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Cdn/profiles/originGroups/origins",
+              "apiVersion": "2024-09-01",
+              "name": "[format('{0}/{1}/{2}', parameters('profileName'), variables('originGroupName'), variables('originName'))]",
+              "properties": {
+                "hostName": "[parameters('entraOriginHost')]",
+                "originHostHeader": "[parameters('entraOriginHost')]",
+                "httpPort": 80,
+                "httpsPort": 443,
+                "priority": 1,
+                "weight": 1000,
+                "enabledState": "Enabled",
+                "enforceCertificateNameCheck": true
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Cdn/profiles/originGroups', parameters('profileName'), variables('originGroupName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Cdn/profiles/customDomains",
+              "apiVersion": "2024-09-01",
+              "name": "[format('{0}/{1}', parameters('profileName'), variables('customDomainName'))]",
+              "properties": {
+                "hostName": "[parameters('customDomainHost')]",
+                "tlsSettings": {
+                  "certificateType": "ManagedCertificate",
+                  "minimumTlsVersion": "TLS12"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Cdn/profiles', parameters('profileName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Cdn/profiles/afdEndpoints/routes",
+              "apiVersion": "2024-09-01",
+              "name": "[format('{0}/{1}/{2}', parameters('profileName'), parameters('endpointName'), variables('routeName'))]",
+              "properties": {
+                "originGroup": {
+                  "id": "[resourceId('Microsoft.Cdn/profiles/originGroups', parameters('profileName'), variables('originGroupName'))]"
+                },
+                "supportedProtocols": [
+                  "Http",
+                  "Https"
+                ],
+                "patternsToMatch": [
+                  "/*"
+                ],
+                "forwardingProtocol": "HttpsOnly",
+                "httpsRedirect": "Enabled",
+                "linkToDefaultDomain": "[if(parameters('enableCustomDomainAssociation'), 'Disabled', 'Enabled')]",
+                "customDomains": "[if(parameters('enableCustomDomainAssociation'), createArray(createObject('id', resourceId('Microsoft.Cdn/profiles/customDomains', parameters('profileName'), variables('customDomainName')))), createArray())]",
+                "enabledState": "Enabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Cdn/profiles/customDomains', parameters('profileName'), variables('customDomainName'))]",
+                "[resourceId('Microsoft.Cdn/profiles/afdEndpoints', parameters('profileName'), parameters('endpointName'))]",
+                "[resourceId('Microsoft.Cdn/profiles/originGroups/origins', parameters('profileName'), variables('originGroupName'), variables('originName'))]",
+                "[resourceId('Microsoft.Cdn/profiles/originGroups', parameters('profileName'), variables('originGroupName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "profileName": {
+              "type": "string",
+              "value": "[parameters('profileName')]"
+            },
+            "endpointHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Cdn/profiles/afdEndpoints', parameters('profileName'), parameters('endpointName')), '2024-09-01').hostName]"
+            },
+            "customDomainHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Cdn/profiles/customDomains', parameters('profileName'), variables('customDomainName')), '2024-09-01').hostName]"
+            },
+            "customDomainValidationToken": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Cdn/profiles/customDomains', parameters('profileName'), variables('customDomainName')), '2024-09-01').validationProperties.validationToken]"
+            },
+            "customDomainAssociationEnabled": {
+              "type": "bool",
+              "value": "[parameters('enableCustomDomainAssociation')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "rg"
+      ]
+    },
     "monitoring": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -851,6 +1104,10 @@
               {
                 "name": "AzureAd__Authority",
                 "value": "[variables('entraAuthorityUrl')]"
+              },
+              {
+                "name": "AzureAd__Instance",
+                "value": "[variables('entraInstanceUrl')]"
               },
               {
                 "name": "AzureAd__ClientCredentials__0__SourceType",
@@ -1160,6 +1417,10 @@
                 "value": "[variables('entraAuthorityUrl')]"
               },
               {
+                "name": "AzureAd__Instance",
+                "value": "[variables('entraInstanceUrl')]"
+              },
+              {
                 "name": "AzureAd__ClientCredentials__0__SourceType",
                 "value": "ClientSecret"
               },
@@ -1408,6 +1669,10 @@
                 "value": "[variables('entraAuthorityUrl')]"
               },
               {
+                "name": "AzureAd__Instance",
+                "value": "[variables('entraInstanceUrl')]"
+              },
+              {
                 "name": "MicrosoftGraph__TenantId",
                 "value": "[parameters('tenantId')]"
               },
@@ -1645,6 +1910,10 @@
               {
                 "name": "AzureAd__Authority",
                 "value": "[variables('entraAuthorityUrl')]"
+              },
+              {
+                "name": "AzureAd__Instance",
+                "value": "[variables('entraInstanceUrl')]"
               },
               {
                 "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
@@ -2259,6 +2528,18 @@
     "acsResourceName": {
       "type": "string",
       "value": "[reference('acs').outputs.name.value]"
+    },
+    "frontDoorEndpointHostName": {
+      "type": "string",
+      "value": "[reference('frontDoor').outputs.endpointHostName.value]"
+    },
+    "frontDoorCustomDomainValidationToken": {
+      "type": "string",
+      "value": "[reference('frontDoor').outputs.customDomainValidationToken.value]"
+    },
+    "frontDoorCustomDomainAssociationEnabled": {
+      "type": "bool",
+      "value": "[reference('frontDoor').outputs.customDomainAssociationEnabled.value]"
     },
     "resolvedWebClientId": {
       "type": "string",
