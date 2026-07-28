@@ -252,12 +252,41 @@ public class PasskeysController : ControllerBase
             return false;
         }
 
+        const string freshnessMessage = "Passkey changes require a recent MFA challenge. Sign in again and try within 5 minutes.";
+
         string? authTime = User.Claims.FirstOrDefault(c => c.Type == "auth_time")?.Value;
-        if (!string.IsNullOrWhiteSpace(authTime) &&
-            long.TryParse(authTime, out long epochSeconds) &&
-            DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeSeconds(epochSeconds) > TimeSpan.FromMinutes(5))
+        if (string.IsNullOrWhiteSpace(authTime))
         {
-            errorMessage = "Passkey changes require a recent MFA challenge. Sign in again and try within 5 minutes.";
+            _telemetry.TrackTrace("[Passkeys] MFA freshness gate denied: auth_time claim absent — verify tenant policy emits this claim");
+            errorMessage = freshnessMessage;
+            return false;
+        }
+
+        if (!long.TryParse(authTime, out long epochSeconds) ||
+            epochSeconds < DateTimeOffset.MinValue.ToUnixTimeSeconds() ||
+            epochSeconds > DateTimeOffset.MaxValue.ToUnixTimeSeconds())
+        {
+            _telemetry.TrackTrace("[Passkeys] MFA freshness gate denied: auth_time claim present but unparseable or out of range");
+            errorMessage = freshnessMessage;
+            return false;
+        }
+
+        var age = DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeSeconds(epochSeconds);
+
+        // Allow up to 2 minutes of future clock skew between this server and the IDP.
+        // NTP-synced cloud hosts rarely drift beyond 1 second; 2 minutes gives a generous
+        // safety margin without materially weakening the 5-minute freshness window.
+        if (age < TimeSpan.FromMinutes(-2))
+        {
+            _telemetry.TrackTrace("[Passkeys] MFA freshness gate denied: auth_time future-dated beyond 2-minute clock-skew tolerance");
+            errorMessage = freshnessMessage;
+            return false;
+        }
+
+        if (age > TimeSpan.FromMinutes(5))
+        {
+            _telemetry.TrackTrace("[Passkeys] MFA freshness gate denied: auth_time stale");
+            errorMessage = freshnessMessage;
             return false;
         }
 
