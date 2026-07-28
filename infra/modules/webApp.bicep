@@ -23,6 +23,12 @@ param websiteLoadCertificates string = '*'
 @description('Resource tags')
 param tags object = {}
 
+@description('Custom hostname to bind to this App Service. Leave empty to skip custom-domain binding.')
+param customHostName string = ''
+
+@description('When true, bind an App Service Managed Certificate to customHostName. Requires a prior deploy with customHostName bound and DNS validated.')
+param enableManagedCertificate bool = false
+
 // Settings injected by this module for every app.
 // WEBSITE_LOAD_CERTIFICATES enables Windows cert-store loading so code can call
 //   X509Store / CertificateRequest.  ANCM in-process is configured at the app level
@@ -56,7 +62,32 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
+var hasCustomHostName = !empty(customHostName)
+var managedCertificateName = 'cert-${replace(customHostName, '.', '-')}'
+
+resource managedCertificate 'Microsoft.Web/certificates@2023-12-01' = if (hasCustomHostName && enableManagedCertificate) {
+  name: managedCertificateName
+  location: location
+  tags: tags
+  properties: {
+    serverFarmId: appServicePlanId
+    canonicalName: customHostName
+  }
+}
+
+resource customHostNameBinding 'Microsoft.Web/sites/hostNameBindings@2023-12-01' = if (hasCustomHostName) {
+  parent: webApp
+  name: customHostName
+  properties: {
+    siteName: name
+    hostNameType: 'Verified'
+    sslState: enableManagedCertificate ? 'SniEnabled' : 'Disabled'
+    thumbprint: enableManagedCertificate ? managedCertificate!.properties.thumbprint : null
+  }
+}
+
 output id string = webApp.id
 output name string = webApp.name
 output principalId string = webApp.identity.principalId
 output defaultHostName string = webApp.properties.defaultHostName
+output customHostName string = hasCustomHostName ? customHostNameBinding.name : ''

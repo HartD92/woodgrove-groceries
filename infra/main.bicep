@@ -48,8 +48,14 @@ param authClientId string
 @description('Primary public domain for the web app (e.g. woodgrovedemo.com)')
 param webDomain string = 'woodgrovedemo.com'
 
-@description('Entra authority URL — e.g. https://<tenant>.ciamlogin.com/')
-param entraAuthorityUrl string
+@description('Entra External ID custom domain host without scheme or path (e.g. customers.hartlabs.info)')
+param entraCustomDomainHost string
+
+@description('Storefront custom hostname. Requires DNS verification before deployment when non-empty.')
+param storefrontCustomHostName string = ''
+
+@description('Enable App Service Managed Certificate and SNI binding for storefrontCustomHostName. Deploy once with false first, then true after the hostname binding exists.')
+param enableStorefrontManagedCertificate bool = false
 
 @description('Cloudflare Zone ID (non-secret; used for DNS automation app setting)')
 param cloudflareZoneId string = ''
@@ -122,6 +128,7 @@ var logWorkspaceName = 'log-woodgrove-${environmentName}'
 var appInsightsName  = 'appi-woodgrove-${environmentName}'
 var acsName          = 'acs-woodgrove-${environmentName}-${uniqueSuffix}'
 var emailSvcName     = 'email-woodgrove-${environmentName}-${uniqueSuffix}'
+var entraAuthorityUrl = 'https://${entraCustomDomainHost}/${tenantId}/v2.0/'
 
 var allTags = union(tags, {
   environment: environmentName
@@ -235,8 +242,11 @@ module webApp 'modules/webApp.bicep' = {
     appServicePlanId: plan.outputs.id
     netFrameworkVersion: 'v8.0'
     websiteLoadCertificates: websiteLoadCertificates
+    customHostName: storefrontCustomHostName
+    enableManagedCertificate: enableStorefrontManagedCertificate
     tags: allTags
     appSettings: [
+      { name: 'AzureAd__TenantId',                            value: tenantId }
       { name: 'AzureAd__ClientId',                            value: resolvedWebClientId }
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
       { name: 'AzureAd__ClientCredentials__0__SourceType',     value: 'ClientSecret' }
@@ -254,6 +264,7 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'GraphApiMiddleware__Endpoint',                  value: 'https://${graphAppName}.azurewebsites.net/profile' }
       { name: 'Cloudflare__ZoneId',                            value: cloudflareZoneId }
       { name: 'Cloudflare__ApiSecret',                         value: kvRefCloudflare }
+      { name: 'Demos__CustomDomain',                           value: entraCustomDomainHost }
       { name: 'AppRoles__PrincipalId',                         value: appRolesPrincipalId }
       { name: 'AppRoles__OrdersManager',                       value: appRolesOrdersManager }
       { name: 'AppRoles__ProductsContributor',                 value: appRolesProductsContributor }
@@ -390,6 +401,7 @@ module acsConnectionStringSecret 'modules/keyVaultSecret.bicep' = {
 
 output resourceGroupName  string = rg.name
 output webAppHostName     string = webApp.outputs.defaultHostName
+output storefrontCustomHostName string = webApp.outputs.customHostName
 output apiAppHostName     string = apiApp.outputs.defaultHostName
 output graphAppHostName   string = graphApp.outputs.defaultHostName
 output authAppHostName    string = authApp.outputs.defaultHostName

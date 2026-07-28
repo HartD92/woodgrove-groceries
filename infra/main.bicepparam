@@ -35,8 +35,10 @@ param authClientId  = '<auth-api-client-id>'          // auth-api app reg (custo
 param paymentApiClientId = '<payment-api-client-id>'  // woodgrove-groceries-payment-api (OBO downstream)
 
 // --- Domain & authority ---
-param webDomain        = 'woodgrovedemo.com'
-param entraAuthorityUrl = 'https://<tenant-subdomain>.ciamlogin.com/<your-entra-external-id-tenant-id>/v2.0'
+param webDomain        = 'groceries.customers.hartlabs.info'
+param entraCustomDomainHost = 'customers.hartlabs.info'
+param storefrontCustomHostName = 'groceries.customers.hartlabs.info'
+param enableStorefrontManagedCertificate = false
 
 // --- Cloudflare (non-secret zone identifier) ---
 param cloudflareZoneId = '<cloudflare-zone-id>'
