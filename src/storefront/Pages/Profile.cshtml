@@ -304,6 +304,17 @@
                     recent MFA challenge.
                 </p>
 
+                <!-- maxlength="64": Graph does not document a character limit for
+                     fido2Methods displayName; 64 is a conservative default consistent
+                     with typical Entra display-name lengths. -->
+                <div class="mb-3 row mfaFulfilled" style="display: none;">
+                    <label for="inputPasskeyName" class="col-sm-2 col-form-label">Passkey name</label>
+                    <div class="col-sm-5">
+                        <input type="text" class="form-control" id="inputPasskeyName" maxlength="64">
+                        <div class="form-text">Optional. Give this passkey a name you'll recognize, like "Work laptop" or "iPhone". This name can't be changed later.</div>
+                    </div>
+                </div>
+
                 <div class="mb-3 row">
                     <div class="col-sm-12">
                         <button type="button" onclick="registerPasskey()" class="btn header-button mfaFulfilled"

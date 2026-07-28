@@ -477,6 +477,8 @@ async function registerPasskey() {
         const publicKey = buildPublicKeyOptions(creationOptions);
         const credential = await navigator.credentials.create({ publicKey: publicKey });
 
+        const displayName = $("#inputPasskeyName").val().trim();
+
         // The Graph beta webauthnPublicKeyCredential type declares only id, response, and
         // clientExtensionResults — rawId and type are WebAuthn-spec members not declared on
         // this OData type; Graph rejects undeclared properties with a 400.
@@ -489,6 +491,9 @@ async function registerPasskey() {
                 }
             }
         };
+        if (displayName) {
+            payload.displayName = displayName;
+        }
 
         const registerResponse = await fetch("/api/passkeys/register", {
             method: "POST",
@@ -505,6 +510,7 @@ async function registerPasskey() {
             return;
         }
 
+        $("#inputPasskeyName").val("");
         getPasskeys();
     } catch (error) {
         showProfileError(error.message || "Passkey registration failed.");
