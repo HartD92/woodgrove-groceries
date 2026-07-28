@@ -63,7 +63,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
 }
 
 var hasCustomHostName = !empty(customHostName)
-var managedCertificateName = 'cert-${replace(customHostName, '.', '-')}'
+var managedCertificateName = '${customHostName}-${webApp.name}'
 
 resource managedCertificate 'Microsoft.Web/certificates@2023-12-01' = if (hasCustomHostName && enableManagedCertificate) {
   name: managedCertificateName
