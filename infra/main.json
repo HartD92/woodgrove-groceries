@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "9518311712818458294"
+      "templateHash": "11073478032137763991"
     }
   },
   "parameters": {
@@ -69,10 +69,10 @@
         "description": "Primary public domain for the web app (e.g. woodgrovedemo.com)"
       }
     },
-    "entraAuthorityUrl": {
+    "entraCustomDomainHost": {
       "type": "string",
       "metadata": {
-        "description": "Entra authority URL — e.g. https://<tenant>.ciamlogin.com/"
+        "description": "Entra External ID custom domain host without scheme or path (e.g. customers.hartlabs.info)"
       }
     },
     "storefrontCustomHostName": {
@@ -181,7 +181,7 @@
     "appInsightsName": "[format('appi-woodgrove-{0}', parameters('environmentName'))]",
     "acsName": "[format('acs-woodgrove-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
     "emailSvcName": "[format('email-woodgrove-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
-    "entraAuthorityHost": "[replace(replace(replace(parameters('entraAuthorityUrl'), 'https://', ''), 'http://', ''), '/', '')]",
+    "entraAuthorityUrl": "[format('https://{0}/{1}/v2.0/', parameters('entraCustomDomainHost'), parameters('tenantId'))]",
     "allTags": "[union(parameters('tags'), createObject('environment', parameters('environmentName'), 'project', 'woodgrove-groceries', 'managedBy', 'bicep', 'SecurityControl', 'Ignore'))]",
     "kvRefAppInsights": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/appinsights-connection-string/)', variables('kvBaseUri'))]",
     "kvRefAcsConn": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/acs-connection-string/)', variables('kvBaseUri'))]",
@@ -841,12 +841,16 @@
           "appSettings": {
             "value": [
               {
+                "name": "AzureAd__TenantId",
+                "value": "[parameters('tenantId')]"
+              },
+              {
                 "name": "AzureAd__ClientId",
                 "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.webClientId.value, ''), parameters('webClientId'))]"
               },
               {
                 "name": "AzureAd__Authority",
-                "value": "[parameters('entraAuthorityUrl')]"
+                "value": "[variables('entraAuthorityUrl')]"
               },
               {
                 "name": "AzureAd__ClientCredentials__0__SourceType",
@@ -910,7 +914,7 @@
               },
               {
                 "name": "Demos__CustomDomain",
-                "value": "[variables('entraAuthorityHost')]"
+                "value": "[parameters('entraCustomDomainHost')]"
               },
               {
                 "name": "AppRoles__PrincipalId",
@@ -1150,7 +1154,7 @@
               },
               {
                 "name": "AzureAd__Authority",
-                "value": "[parameters('entraAuthorityUrl')]"
+                "value": "[variables('entraAuthorityUrl')]"
               },
               {
                 "name": "AzureAd__ClientCredentials__0__SourceType",
@@ -1395,7 +1399,7 @@
               },
               {
                 "name": "AzureAd__Authority",
-                "value": "[parameters('entraAuthorityUrl')]"
+                "value": "[variables('entraAuthorityUrl')]"
               },
               {
                 "name": "MicrosoftGraph__TenantId",
@@ -1631,7 +1635,7 @@
               },
               {
                 "name": "AzureAd__Authority",
-                "value": "[parameters('entraAuthorityUrl')]"
+                "value": "[variables('entraAuthorityUrl')]"
               },
               {
                 "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",

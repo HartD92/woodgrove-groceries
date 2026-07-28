@@ -824,7 +824,7 @@ jobs:
       ENTRA_TENANT_ID: ${{ vars.ENTRA_TENANT_ID }}
       CIAM_SUBDOMAIN: ${{ vars.ENTRA_CIAM_SUBDOMAIN }}
       STOREFRONT_CUSTOM_HOSTNAME: groceries.customers.hartlabs.info
-      STOREFRONT_AUTHORITY_URL: https://customers.hartlabs.info/
+      ENTRA_CUSTOM_DOMAIN_HOST: customers.hartlabs.info
       STOREFRONT_MANAGED_CERTIFICATE_ENABLED: ${{ vars.STOREFRONT_MANAGED_CERTIFICATE_ENABLED || 'false' }}
       APP_ROLES_PRINCIPAL_ID: ${{ needs.entra-provision.outputs.web_sp_id }}
       APP_ROLES_ORDERS_MANAGER: ${{ needs.entra-provision.outputs.orders_manager_role_id }}
@@ -871,7 +871,7 @@ jobs:
                          paymentApiClientId=$env:PAYMENT_API_CLIENT_ID `
                          tenantId=$env:ENTRA_TENANT_ID `
                          webDomain=$env:STOREFRONT_CUSTOM_HOSTNAME `
-                         entraAuthorityUrl=$env:STOREFRONT_AUTHORITY_URL `
+                         entraCustomDomainHost=$env:ENTRA_CUSTOM_DOMAIN_HOST `
                          storefrontCustomHostName=$env:STOREFRONT_CUSTOM_HOSTNAME `
                          enableStorefrontManagedCertificate=$env:STOREFRONT_MANAGED_CERTIFICATE_ENABLED `
                          appRolesPrincipalId=$env:APP_ROLES_PRINCIPAL_ID `
@@ -897,7 +897,7 @@ jobs:
                          authClientId=$env:AUTH_CLIENT_ID `
                          paymentApiClientId=$env:PAYMENT_API_CLIENT_ID `
                          tenantId=$env:ENTRA_TENANT_ID `
-                         entraAuthorityUrl=$env:STOREFRONT_AUTHORITY_URL `
+                         entraCustomDomainHost=$env:ENTRA_CUSTOM_DOMAIN_HOST `
                          webDomain=$env:STOREFRONT_CUSTOM_HOSTNAME `
                          storefrontCustomHostName=$env:STOREFRONT_CUSTOM_HOSTNAME `
                          enableStorefrontManagedCertificate=$env:STOREFRONT_MANAGED_CERTIFICATE_ENABLED `
@@ -925,6 +925,18 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($webCustomHost)) {
             $webCustomHost = $env:STOREFRONT_CUSTOM_HOSTNAME
           }
+          $useCustomHostAsPrimary = ($env:STOREFRONT_MANAGED_CERTIFICATE_ENABLED -ieq 'true') -and -not [string]::IsNullOrWhiteSpace($webCustomHost)
+          if ($useCustomHostAsPrimary) {
+            $primaryWebHost = $webCustomHost
+            $secondaryWebHost = $webHost
+          } else {
+            $primaryWebHost = $webHost
+            $secondaryWebHost = $webCustomHost
+          }
+          $webRedirectUris = @(
+            "https://$primaryWebHost/signin-oidc"
+            "https://$secondaryWebHost/signin-oidc"
+          ) | Select-Object -Unique
           $authHost = $outputs.authAppHostName.value
           $webObjectId = az ad app show --id $env:WEB_CLIENT_ID --query id -o tsv
           $authObjectId = az ad app show --id $env:AUTH_CLIENT_ID --query id -o tsv
@@ -949,11 +961,8 @@ jobs:
             -Uri "https://graph.microsoft.com/v1.0/applications/$webObjectId" `
             -Body ([ordered]@{
               web = [ordered]@{
-                redirectUris = @(
-                  "https://$webHost/signin-oidc"
-                  "https://$webCustomHost/signin-oidc"
-                )
-                logoutUrl = "https://$webCustomHost/signout-oidc"
+                redirectUris = $webRedirectUris
+                logoutUrl = "https://$primaryWebHost/signout-oidc"
                 implicitGrantSettings = [ordered]@{
                   enableIdTokenIssuance = $true
                   enableAccessTokenIssuance = $false

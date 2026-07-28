@@ -48,8 +48,8 @@ param authClientId string
 @description('Primary public domain for the web app (e.g. woodgrovedemo.com)')
 param webDomain string = 'woodgrovedemo.com'
 
-@description('Entra authority URL — e.g. https://<tenant>.ciamlogin.com/')
-param entraAuthorityUrl string
+@description('Entra External ID custom domain host without scheme or path (e.g. customers.hartlabs.info)')
+param entraCustomDomainHost string
 
 @description('Storefront custom hostname. Requires DNS verification before deployment when non-empty.')
 param storefrontCustomHostName string = ''
@@ -128,7 +128,7 @@ var logWorkspaceName = 'log-woodgrove-${environmentName}'
 var appInsightsName  = 'appi-woodgrove-${environmentName}'
 var acsName          = 'acs-woodgrove-${environmentName}-${uniqueSuffix}'
 var emailSvcName     = 'email-woodgrove-${environmentName}-${uniqueSuffix}'
-var entraAuthorityHost = replace(replace(replace(entraAuthorityUrl, 'https://', ''), 'http://', ''), '/', '')
+var entraAuthorityUrl = 'https://${entraCustomDomainHost}/${tenantId}/v2.0/'
 
 var allTags = union(tags, {
   environment: environmentName
@@ -246,6 +246,7 @@ module webApp 'modules/webApp.bicep' = {
     enableManagedCertificate: enableStorefrontManagedCertificate
     tags: allTags
     appSettings: [
+      { name: 'AzureAd__TenantId',                            value: tenantId }
       { name: 'AzureAd__ClientId',                            value: resolvedWebClientId }
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
       { name: 'AzureAd__ClientCredentials__0__SourceType',     value: 'ClientSecret' }
@@ -263,7 +264,7 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'GraphApiMiddleware__Endpoint',                  value: 'https://${graphAppName}.azurewebsites.net/profile' }
       { name: 'Cloudflare__ZoneId',                            value: cloudflareZoneId }
       { name: 'Cloudflare__ApiSecret',                         value: kvRefCloudflare }
-      { name: 'Demos__CustomDomain',                           value: entraAuthorityHost }
+      { name: 'Demos__CustomDomain',                           value: entraCustomDomainHost }
       { name: 'AppRoles__PrincipalId',                         value: appRolesPrincipalId }
       { name: 'AppRoles__OrdersManager',                       value: appRolesOrdersManager }
       { name: 'AppRoles__ProductsContributor',                 value: appRolesProductsContributor }

@@ -36,7 +36,7 @@ param paymentApiClientId = '<payment-api-client-id>'  // woodgrove-groceries-pay
 
 // --- Domain & authority ---
 param webDomain        = 'groceries.customers.hartlabs.info'
-param entraAuthorityUrl = 'https://customers.hartlabs.info/'
+param entraCustomDomainHost = 'customers.hartlabs.info'
 param storefrontCustomHostName = 'groceries.customers.hartlabs.info'
 param enableStorefrontManagedCertificate = false
 
