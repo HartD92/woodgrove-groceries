@@ -283,7 +283,7 @@ module apiApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__ClientCredentials__0__ClientSecret',   value: kvRefApiSecret }
       { name: 'WoodgroveGroceriesDownstreamApi__BaseUrl',      value: 'api://${resolvedPaymentApiClientId}' }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING',         value: kvRefAppInsights }
-      { name: 'AzureCommunicationServices__ConnectionString',  value: kvRefAcsConn }
+      { name: 'AppSettings__Email__ConnectionString',          value: kvRefAcsConn }
     ]
   }
 }
@@ -371,6 +371,16 @@ module acs 'modules/communicationServices.bicep' = {
     emailServiceName: emailSvcName
     dataLocation: acsDataLocation
     tags: allTags
+  }
+}
+
+module acsConnectionStringSecret 'modules/keyVaultSecret.bicep' = {
+  name: 'acsConnectionStringSecret'
+  scope: rg
+  params: {
+    keyVaultName: keyVault.outputs.name
+    secretName: 'acs-connection-string'
+    secretValue: acs.outputs.primaryConnectionString
   }
 }
 

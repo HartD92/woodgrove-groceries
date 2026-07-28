@@ -58,6 +58,9 @@ resource acs 'Microsoft.Communication/communicationServices@2023-04-01' = {
   }
 }
 
+@secure()
+output primaryConnectionString string = acs.listKeys().primaryConnectionString
+
 output id string = acs.id
 output name string = acs.name
 output emailServiceId string = emailService.id

@@ -1,11 +1,12 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "languageVersion": "2.0",
   "contentVersion": "1.0.0.0",
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.45.15.27210",
-      "templateHash": "16563166074031564779"
+      "version": "0.41.2.15936",
+      "templateHash": "11540142985474526128"
     }
   },
   "parameters": {
@@ -174,15 +175,15 @@
     "kvRefGraphSecret": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/graph-client-secret/)', variables('kvBaseUri'))]",
     "kvRefCloudflare": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/cloudflare-api-secret/)', variables('kvBaseUri'))]"
   },
-  "resources": [
-    {
+  "resources": {
+    "rg": {
       "type": "Microsoft.Resources/resourceGroups",
       "apiVersion": "2021-04-01",
       "name": "[variables('rgName')]",
       "location": "[parameters('location')]",
       "tags": "[variables('allTags')]"
     },
-    {
+    "entraApps": {
       "condition": "[parameters('provisionEntraApps')]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -214,8 +215,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "15054267085096784600"
+              "version": "0.41.2.15936",
+              "templateHash": "7450211895977902770"
             }
           },
           "parameters": {
@@ -559,10 +560,10 @@
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+        "rg"
       ]
     },
-    {
+    "monitoring": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "monitoring",
@@ -592,8 +593,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "16539765317479213374"
+              "version": "0.41.2.15936",
+              "templateHash": "14673550674518780734"
             }
           },
           "parameters": {
@@ -690,10 +691,10 @@
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+        "rg"
       ]
     },
-    {
+    "plan": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "appServicePlan",
@@ -723,8 +724,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "2841159868597642229"
+              "version": "0.41.2.15936",
+              "templateHash": "10391113487225548429"
             }
           },
           "parameters": {
@@ -784,10 +785,10 @@
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+        "rg"
       ]
     },
-    {
+    "webApp": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "webApp",
@@ -805,7 +806,7 @@
             "value": "[parameters('location')]"
           },
           "appServicePlanId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan'), '2025-04-01').outputs.id.value]"
+            "value": "[reference('plan').outputs.id.value]"
           },
           "netFrameworkVersion": {
             "value": "v8.0"
@@ -820,7 +821,7 @@
             "value": [
               {
                 "name": "AzureAd__ClientId",
-                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.webClientId.value, ''), parameters('webClientId'))]"
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.webClientId.value, ''), parameters('webClientId'))]"
               },
               {
                 "name": "AzureAd__Authority",
@@ -840,7 +841,7 @@
               },
               {
                 "name": "MicrosoftGraph__ClientId",
-                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.webClientId.value, ''), parameters('webClientId'))]"
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.webClientId.value, ''), parameters('webClientId'))]"
               },
               {
                 "name": "MicrosoftGraph__ClientSecret",
@@ -919,8 +920,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "18283134702710421303"
+              "version": "0.41.2.15936",
+              "templateHash": "1206280210402094293"
             }
           },
           "parameters": {
@@ -1034,12 +1035,12 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+        "entraApps",
+        "plan",
+        "rg"
       ]
     },
-    {
+    "apiApp": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "apiApp",
@@ -1057,7 +1058,7 @@
             "value": "[parameters('location')]"
           },
           "appServicePlanId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan'), '2025-04-01').outputs.id.value]"
+            "value": "[reference('plan').outputs.id.value]"
           },
           "netFrameworkVersion": {
             "value": "v8.0"
@@ -1076,7 +1077,7 @@
               },
               {
                 "name": "AzureAd__ClientId",
-                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.apiClientId.value, ''), parameters('apiClientId'))]"
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.apiClientId.value, ''), parameters('apiClientId'))]"
               },
               {
                 "name": "AzureAd__Authority",
@@ -1092,14 +1093,14 @@
               },
               {
                 "name": "WoodgroveGroceriesDownstreamApi__BaseUrl",
-                "value": "[format('api://{0}', if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.paymentApiClientId.value, ''), parameters('paymentApiClientId')))]"
+                "value": "[format('api://{0}', if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.paymentApiClientId.value, ''), parameters('paymentApiClientId')))]"
               },
               {
                 "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
                 "value": "[variables('kvRefAppInsights')]"
               },
               {
-                "name": "AzureCommunicationServices__ConnectionString",
+                "name": "AppSettings__Email__ConnectionString",
                 "value": "[variables('kvRefAcsConn')]"
               }
             ]
@@ -1111,8 +1112,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "18283134702710421303"
+              "version": "0.41.2.15936",
+              "templateHash": "1206280210402094293"
             }
           },
           "parameters": {
@@ -1226,12 +1227,12 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+        "entraApps",
+        "plan",
+        "rg"
       ]
     },
-    {
+    "graphApp": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "graphApp",
@@ -1249,7 +1250,7 @@
             "value": "[parameters('location')]"
           },
           "appServicePlanId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan'), '2025-04-01').outputs.id.value]"
+            "value": "[reference('plan').outputs.id.value]"
           },
           "netFrameworkVersion": {
             "value": "v8.0"
@@ -1268,7 +1269,7 @@
               },
               {
                 "name": "AzureAd__ClientId",
-                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
               },
               {
                 "name": "AzureAd__Authority",
@@ -1280,7 +1281,7 @@
               },
               {
                 "name": "MicrosoftGraph__ClientId",
-                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
               },
               {
                 "name": "MicrosoftGraph__ClientSecret",
@@ -1299,8 +1300,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "18283134702710421303"
+              "version": "0.41.2.15936",
+              "templateHash": "1206280210402094293"
             }
           },
           "parameters": {
@@ -1414,12 +1415,12 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+        "entraApps",
+        "plan",
+        "rg"
       ]
     },
-    {
+    "authApp": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "authApp",
@@ -1437,7 +1438,7 @@
             "value": "[parameters('location')]"
           },
           "appServicePlanId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan'), '2025-04-01').outputs.id.value]"
+            "value": "[reference('plan').outputs.id.value]"
           },
           "netFrameworkVersion": {
             "value": "v8.0"
@@ -1456,7 +1457,7 @@
               },
               {
                 "name": "AzureAd__ClientId",
-                "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.authClientId.value, ''), parameters('authClientId'))]"
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.authClientId.value, ''), parameters('authClientId'))]"
               },
               {
                 "name": "AzureAd__Authority",
@@ -1475,8 +1476,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "18283134702710421303"
+              "version": "0.41.2.15936",
+              "templateHash": "1206280210402094293"
             }
           },
           "parameters": {
@@ -1590,12 +1591,12 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'appServicePlan')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+        "entraApps",
+        "plan",
+        "rg"
       ]
     },
-    {
+    "keyVault": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "keyVault",
@@ -1617,10 +1618,10 @@
           },
           "appPrincipalIds": {
             "value": [
-              "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'webApp'), '2025-04-01').outputs.principalId.value]",
-              "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'apiApp'), '2025-04-01').outputs.principalId.value]",
-              "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'graphApp'), '2025-04-01').outputs.principalId.value]",
-              "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'authApp'), '2025-04-01').outputs.principalId.value]"
+              "[reference('webApp').outputs.principalId.value]",
+              "[reference('apiApp').outputs.principalId.value]",
+              "[reference('graphApp').outputs.principalId.value]",
+              "[reference('authApp').outputs.principalId.value]"
             ]
           },
           "deployerPrincipalId": {
@@ -1633,8 +1634,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "9193727835736191989"
+              "version": "0.41.2.15936",
+              "templateHash": "750739688656757024"
             }
           },
           "parameters": {
@@ -1768,14 +1769,14 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'apiApp')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'authApp')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'graphApp')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'webApp')]"
+        "apiApp",
+        "authApp",
+        "graphApp",
+        "rg",
+        "webApp"
       ]
     },
-    {
+    "acs": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "communicationServices",
@@ -1801,12 +1802,13 @@
         },
         "template": {
           "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
           "contentVersion": "1.0.0.0",
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "13209425216900243481"
+              "version": "0.41.2.15936",
+              "templateHash": "3277805566000252499"
             }
           },
           "parameters": {
@@ -1837,8 +1839,8 @@
               }
             }
           },
-          "resources": [
-            {
+          "resources": {
+            "emailService": {
               "type": "Microsoft.Communication/emailServices",
               "apiVersion": "2023-04-01",
               "name": "[parameters('emailServiceName')]",
@@ -1848,7 +1850,7 @@
                 "dataLocation": "[parameters('dataLocation')]"
               }
             },
-            {
+            "azureManagedDomain": {
               "type": "Microsoft.Communication/emailServices/domains",
               "apiVersion": "2023-04-01",
               "name": "[format('{0}/{1}', parameters('emailServiceName'), 'AzureManagedDomain')]",
@@ -1857,10 +1859,10 @@
                 "domainManagement": "AzureManaged"
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Communication/emailServices', parameters('emailServiceName'))]"
+                "emailService"
               ]
             },
-            {
+            "acs": {
               "type": "Microsoft.Communication/communicationServices",
               "apiVersion": "2023-04-01",
               "name": "[parameters('name')]",
@@ -1873,11 +1875,15 @@
                 ]
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), 'AzureManagedDomain')]"
+                "azureManagedDomain"
               ]
             }
-          ],
+          },
           "outputs": {
+            "primaryConnectionString": {
+              "type": "securestring",
+              "value": "[listKeys('acs', '2023-04-01').primaryConnectionString]"
+            },
             "id": {
               "type": "string",
               "value": "[resourceId('Microsoft.Communication/communicationServices', parameters('name'))]"
@@ -1902,10 +1908,79 @@
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+        "rg"
+      ]
+    },
+    "acsConnectionStringSecret": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "acsConnectionStringSecret",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "keyVaultName": {
+            "value": "[reference('keyVault').outputs.name.value]"
+          },
+          "secretName": {
+            "value": "acs-connection-string"
+          },
+          "secretValue": {
+            "value": "[listOutputsWithSecureValues('acs', '2025-04-01').primaryConnectionString]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "16909473458919805541"
+            }
+          },
+          "parameters": {
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Key Vault name"
+              }
+            },
+            "secretName": {
+              "type": "string",
+              "metadata": {
+                "description": "Secret name"
+              }
+            },
+            "secretValue": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Secret value"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), parameters('secretName'))]",
+              "properties": {
+                "value": "[parameters('secretValue')]"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "acs",
+        "keyVault",
+        "rg"
       ]
     }
-  ],
+  },
   "outputs": {
     "resourceGroupName": {
       "type": "string",
@@ -1913,55 +1988,55 @@
     },
     "webAppHostName": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'webApp'), '2025-04-01').outputs.defaultHostName.value]"
+      "value": "[reference('webApp').outputs.defaultHostName.value]"
     },
     "apiAppHostName": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'apiApp'), '2025-04-01').outputs.defaultHostName.value]"
+      "value": "[reference('apiApp').outputs.defaultHostName.value]"
     },
     "graphAppHostName": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'graphApp'), '2025-04-01').outputs.defaultHostName.value]"
+      "value": "[reference('graphApp').outputs.defaultHostName.value]"
     },
     "authAppHostName": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'authApp'), '2025-04-01').outputs.defaultHostName.value]"
+      "value": "[reference('authApp').outputs.defaultHostName.value]"
     },
     "keyVaultName": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'keyVault'), '2025-04-01').outputs.name.value]"
+      "value": "[reference('keyVault').outputs.name.value]"
     },
     "keyVaultUri": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'keyVault'), '2025-04-01').outputs.uri.value]"
+      "value": "[reference('keyVault').outputs.uri.value]"
     },
     "appInsightsName": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.appInsightsName.value]"
+      "value": "[reference('monitoring').outputs.appInsightsName.value]"
     },
     "acsResourceName": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'communicationServices'), '2025-04-01').outputs.name.value]"
+      "value": "[reference('acs').outputs.name.value]"
     },
     "resolvedWebClientId": {
       "type": "string",
-      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.webClientId.value, ''), parameters('webClientId'))]"
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.webClientId.value, ''), parameters('webClientId'))]"
     },
     "resolvedApiClientId": {
       "type": "string",
-      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.apiClientId.value, ''), parameters('apiClientId'))]"
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.apiClientId.value, ''), parameters('apiClientId'))]"
     },
     "resolvedGraphClientId": {
       "type": "string",
-      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
     },
     "resolvedAuthClientId": {
       "type": "string",
-      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.authClientId.value, ''), parameters('authClientId'))]"
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.authClientId.value, ''), parameters('authClientId'))]"
     },
     "resolvedPaymentApiClientId": {
       "type": "string",
-      "value": "[if(parameters('provisionEntraApps'), coalesce(reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'entraApps'), '2025-04-01').outputs.paymentApiClientId.value, ''), parameters('paymentApiClientId'))]"
+      "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.paymentApiClientId.value, ''), parameters('paymentApiClientId'))]"
     }
   }
 }
