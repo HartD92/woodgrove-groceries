@@ -477,11 +477,12 @@ async function registerPasskey() {
         const publicKey = buildPublicKeyOptions(creationOptions);
         const credential = await navigator.credentials.create({ publicKey: publicKey });
 
+        // The Graph beta webauthnPublicKeyCredential type declares only id, response, and
+        // clientExtensionResults — rawId and type are WebAuthn-spec members not declared on
+        // this OData type; Graph rejects undeclared properties with a 400.
         const payload = {
             publicKeyCredential: {
                 id: credential.id,
-                rawId: bufferToBase64url(credential.rawId),
-                type: credential.type,
                 response: {
                     attestationObject: bufferToBase64url(credential.response.attestationObject),
                     clientDataJSON: bufferToBase64url(credential.response.clientDataJSON)
