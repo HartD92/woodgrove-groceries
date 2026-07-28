@@ -432,7 +432,13 @@ function renderPasskeys(passkeys) {
         row.append(`<td>${escapeHtml(formatDateTime(passkey.lastUsedDateTime))}</td>`);
 
         if (mfaFulfilled) {
-            row.append(`<td><button type="button" class="btn btn-sm btn-outline-danger" onclick="deletePasskey('${escapeAttribute(passkey.id || "")}')">Delete</button></td>`);
+            const deleteBtn = $('<button type="button" class="btn btn-sm btn-outline-danger">Delete</button>');
+            const passkeyId = passkey.id || "";
+            const displayName = passkey.displayName || "";
+            deleteBtn.on("click", function () {
+                deletePasskey(passkeyId, displayName, passkeys.length, $(this));
+            });
+            row.append($("<td></td>").append(deleteBtn));
         } else {
             row.append(`<td><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#mfaAlert">Delete</button></td>`);
         }
@@ -443,20 +449,28 @@ function renderPasskeys(passkeys) {
 
 async function registerPasskey() {
     clearProfileError();
+
+    if (!window.PublicKeyCredential || !navigator.credentials) {
+        showProfileError("This browser doesn't support passkeys. Use a modern browser over HTTPS.");
+        return;
+    }
+    if (!window.isSecureContext) {
+        showProfileError("Passkey registration requires a secure connection (HTTPS).");
+        return;
+    }
+
     $("#registerPasskeyButton").prop("disabled", true);
     $("#registerPasskeySpinner").show();
 
     try {
         const creationOptionsResponse = await fetch("/api/passkeys/creation-options");
+        if (!creationOptionsResponse.ok) {
+            throw new Error(`Server error: ${creationOptionsResponse.status}`);
+        }
         const creationOptions = await creationOptionsResponse.json();
 
         if (creationOptions.errorMessage) {
             showProfileError(creationOptions.errorMessage);
-            return;
-        }
-
-        if (!window.PublicKeyCredential || !navigator.credentials) {
-            showProfileError("This browser doesn't support passkeys.");
             return;
         }
 
@@ -466,6 +480,8 @@ async function registerPasskey() {
         const payload = {
             publicKeyCredential: {
                 id: credential.id,
+                rawId: bufferToBase64url(credential.rawId),
+                type: credential.type,
                 response: {
                     attestationObject: bufferToBase64url(credential.response.attestationObject),
                     clientDataJSON: bufferToBase64url(credential.response.clientDataJSON)
@@ -478,6 +494,9 @@ async function registerPasskey() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
+        if (!registerResponse.ok) {
+            throw new Error(`Server error: ${registerResponse.status}`);
+        }
 
         const registerResult = await registerResponse.json();
         if (registerResult.errorMessage) {
@@ -494,20 +513,30 @@ async function registerPasskey() {
     }
 }
 
-async function deletePasskey(passkeyId) {
+async function deletePasskey(passkeyId, displayName, totalCount, $button) {
     clearProfileError();
     if (!passkeyId) {
         return;
     }
 
-    if (!confirm("Delete this passkey?")) {
+    const name = displayName || "this passkey";
+    let message = `Delete passkey "${name}"? This cannot be undone.`;
+    if (totalCount === 1) {
+        message = `⚠️ This is your only passkey. Deleting it removes passkey sign-in from your account entirely.\n\n${message}`;
+    }
+
+    if (!confirm(message)) {
         return;
     }
 
+    $button.prop("disabled", true);
     try {
         const response = await fetch(`/api/passkeys/${encodeURIComponent(passkeyId)}`, {
             method: "DELETE"
         });
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+        }
         const result = await response.json();
         if (result.errorMessage) {
             showProfileError(result.errorMessage);
@@ -517,6 +546,8 @@ async function deletePasskey(passkeyId) {
         getPasskeys();
     } catch (error) {
         showProfileError(error.message || "Passkey deletion failed.");
+    } finally {
+        $button.prop("disabled", false);
     }
 }
 
@@ -575,12 +606,6 @@ function escapeHtml(value) {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
-}
-
-function escapeAttribute(value) {
-    return String(value)
-        .replaceAll("\\", "\\\\")
-        .replaceAll("'", "\\'");
 }
 
 function formatDateTime(value) {
