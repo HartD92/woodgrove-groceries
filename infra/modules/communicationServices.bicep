@@ -60,6 +60,7 @@ resource acs 'Microsoft.Communication/communicationServices@2023-04-01' = {
 
 @secure()
 output primaryConnectionString string = acs.listKeys().primaryConnectionString
+output senderAddress string = 'donotreply@${azureManagedDomain.properties.mailFromSenderDomain}'
 
 output id string = acs.id
 output name string = acs.name

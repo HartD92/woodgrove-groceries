@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "11540142985474526128"
+      "templateHash": "14443688513007635552"
     }
   },
   "parameters": {
@@ -880,10 +880,6 @@
                 "value": "[format('https://{0}.azurewebsites.net/profile', variables('graphAppName'))]"
               },
               {
-                "name": "AzureCommunicationServices__ConnectionString",
-                "value": "[variables('kvRefAcsConn')]"
-              },
-              {
                 "name": "Cloudflare__ZoneId",
                 "value": "[parameters('cloudflareZoneId')]"
               },
@@ -1102,6 +1098,10 @@
               {
                 "name": "AppSettings__Email__ConnectionString",
                 "value": "[variables('kvRefAcsConn')]"
+              },
+              {
+                "name": "AppSettings__Email__Sender",
+                "value": "[reference('acs').outputs.senderAddress.value]"
               }
             ]
           }
@@ -1227,6 +1227,7 @@
         }
       },
       "dependsOn": [
+        "acs",
         "entraApps",
         "plan",
         "rg"
@@ -1808,7 +1809,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "3277805566000252499"
+              "templateHash": "7428856110134837230"
             }
           },
           "parameters": {
@@ -1883,6 +1884,10 @@
             "primaryConnectionString": {
               "type": "securestring",
               "value": "[listKeys('acs', '2023-04-01').primaryConnectionString]"
+            },
+            "senderAddress": {
+              "type": "string",
+              "value": "[format('donotreply@{0}', reference('azureManagedDomain').mailFromSenderDomain)]"
             },
             "id": {
               "type": "string",

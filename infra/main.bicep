@@ -252,7 +252,6 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'GraphApiMiddleware__BaseUrl',                   value: 'api://woodgrove-graph-middleware-${environmentName}' }
       { name: 'GraphApiMiddleware__Scopes__0',                 value: 'access_as_user' }
       { name: 'GraphApiMiddleware__Endpoint',                  value: 'https://${graphAppName}.azurewebsites.net/profile' }
-      { name: 'AzureCommunicationServices__ConnectionString',  value: kvRefAcsConn }
       { name: 'Cloudflare__ZoneId',                            value: cloudflareZoneId }
       { name: 'Cloudflare__ApiSecret',                         value: kvRefCloudflare }
       { name: 'AppRoles__PrincipalId',                         value: appRolesPrincipalId }
@@ -284,6 +283,7 @@ module apiApp 'modules/webApp.bicep' = {
       { name: 'WoodgroveGroceriesDownstreamApi__BaseUrl',      value: 'api://${resolvedPaymentApiClientId}' }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING',         value: kvRefAppInsights }
       { name: 'AppSettings__Email__ConnectionString',          value: kvRefAcsConn }
+      { name: 'AppSettings__Email__Sender',                    value: acs.outputs.senderAddress }
     ]
   }
 }
