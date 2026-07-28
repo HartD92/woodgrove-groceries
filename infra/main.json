@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "14443688513007635552"
+      "templateHash": "9518311712818458294"
     }
   },
   "parameters": {
@@ -73,6 +73,20 @@
       "type": "string",
       "metadata": {
         "description": "Entra authority URL — e.g. https://<tenant>.ciamlogin.com/"
+      }
+    },
+    "storefrontCustomHostName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Storefront custom hostname. Requires DNS verification before deployment when non-empty."
+      }
+    },
+    "enableStorefrontManagedCertificate": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable App Service Managed Certificate and SNI binding for storefrontCustomHostName. Deploy once with false first, then true after the hostname binding exists."
       }
     },
     "cloudflareZoneId": {
@@ -167,6 +181,7 @@
     "appInsightsName": "[format('appi-woodgrove-{0}', parameters('environmentName'))]",
     "acsName": "[format('acs-woodgrove-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
     "emailSvcName": "[format('email-woodgrove-{0}-{1}', parameters('environmentName'), variables('uniqueSuffix'))]",
+    "entraAuthorityHost": "[replace(replace(replace(parameters('entraAuthorityUrl'), 'https://', ''), 'http://', ''), '/', '')]",
     "allTags": "[union(parameters('tags'), createObject('environment', parameters('environmentName'), 'project', 'woodgrove-groceries', 'managedBy', 'bicep', 'SecurityControl', 'Ignore'))]",
     "kvRefAppInsights": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/appinsights-connection-string/)', variables('kvBaseUri'))]",
     "kvRefAcsConn": "[format('@Microsoft.KeyVault(SecretUri={0}secrets/acs-connection-string/)', variables('kvBaseUri'))]",
@@ -814,6 +829,12 @@
           "websiteLoadCertificates": {
             "value": "[parameters('websiteLoadCertificates')]"
           },
+          "customHostName": {
+            "value": "[parameters('storefrontCustomHostName')]"
+          },
+          "enableManagedCertificate": {
+            "value": "[parameters('enableStorefrontManagedCertificate')]"
+          },
           "tags": {
             "value": "[variables('allTags')]"
           },
@@ -888,6 +909,10 @@
                 "value": "[variables('kvRefCloudflare')]"
               },
               {
+                "name": "Demos__CustomDomain",
+                "value": "[variables('entraAuthorityHost')]"
+              },
+              {
                 "name": "AppRoles__PrincipalId",
                 "value": "[parameters('appRolesPrincipalId')]"
               },
@@ -917,7 +942,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "1206280210402094293"
+              "templateHash": "8911377546284001923"
             }
           },
           "parameters": {
@@ -966,6 +991,20 @@
               "metadata": {
                 "description": "Resource tags"
               }
+            },
+            "customHostName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Custom hostname to bind to this App Service. Leave empty to skip custom-domain binding."
+              }
+            },
+            "enableManagedCertificate": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "When true, bind an App Service Managed Certificate to customHostName. Requires a prior deploy with customHostName bound and DNS validated."
+              }
             }
           },
           "variables": {
@@ -982,7 +1021,9 @@
                 "name": "XDT_MicrosoftApplicationInsights_Mode",
                 "value": "Recommended"
               }
-            ]
+            ],
+            "hasCustomHostName": "[not(empty(parameters('customHostName')))]",
+            "managedCertificateName": "[format('cert-{0}', replace(parameters('customHostName'), '.', '-'))]"
           },
           "resources": [
             {
@@ -1008,6 +1049,34 @@
                   "appSettings": "[flatten(createArray(variables('platformSettings'), parameters('appSettings')))]"
                 }
               }
+            },
+            {
+              "condition": "[and(variables('hasCustomHostName'), parameters('enableManagedCertificate'))]",
+              "type": "Microsoft.Web/certificates",
+              "apiVersion": "2023-12-01",
+              "name": "[variables('managedCertificateName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "serverFarmId": "[parameters('appServicePlanId')]",
+                "canonicalName": "[parameters('customHostName')]"
+              }
+            },
+            {
+              "condition": "[variables('hasCustomHostName')]",
+              "type": "Microsoft.Web/sites/hostNameBindings",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('name'), parameters('customHostName'))]",
+              "properties": {
+                "siteName": "[parameters('name')]",
+                "hostNameType": "Verified",
+                "sslState": "[if(parameters('enableManagedCertificate'), 'SniEnabled', 'Disabled')]",
+                "thumbprint": "[if(parameters('enableManagedCertificate'), reference(resourceId('Microsoft.Web/certificates', variables('managedCertificateName')), '2023-12-01').thumbprint, null())]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/certificates', variables('managedCertificateName'))]",
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
             }
           ],
           "outputs": {
@@ -1026,6 +1095,10 @@
             "defaultHostName": {
               "type": "string",
               "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01').defaultHostName]"
+            },
+            "customHostName": {
+              "type": "string",
+              "value": "[if(variables('hasCustomHostName'), parameters('customHostName'), '')]"
             }
           }
         }
@@ -1113,7 +1186,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "1206280210402094293"
+              "templateHash": "8911377546284001923"
             }
           },
           "parameters": {
@@ -1162,6 +1235,20 @@
               "metadata": {
                 "description": "Resource tags"
               }
+            },
+            "customHostName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Custom hostname to bind to this App Service. Leave empty to skip custom-domain binding."
+              }
+            },
+            "enableManagedCertificate": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "When true, bind an App Service Managed Certificate to customHostName. Requires a prior deploy with customHostName bound and DNS validated."
+              }
             }
           },
           "variables": {
@@ -1178,7 +1265,9 @@
                 "name": "XDT_MicrosoftApplicationInsights_Mode",
                 "value": "Recommended"
               }
-            ]
+            ],
+            "hasCustomHostName": "[not(empty(parameters('customHostName')))]",
+            "managedCertificateName": "[format('cert-{0}', replace(parameters('customHostName'), '.', '-'))]"
           },
           "resources": [
             {
@@ -1204,6 +1293,34 @@
                   "appSettings": "[flatten(createArray(variables('platformSettings'), parameters('appSettings')))]"
                 }
               }
+            },
+            {
+              "condition": "[and(variables('hasCustomHostName'), parameters('enableManagedCertificate'))]",
+              "type": "Microsoft.Web/certificates",
+              "apiVersion": "2023-12-01",
+              "name": "[variables('managedCertificateName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "serverFarmId": "[parameters('appServicePlanId')]",
+                "canonicalName": "[parameters('customHostName')]"
+              }
+            },
+            {
+              "condition": "[variables('hasCustomHostName')]",
+              "type": "Microsoft.Web/sites/hostNameBindings",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('name'), parameters('customHostName'))]",
+              "properties": {
+                "siteName": "[parameters('name')]",
+                "hostNameType": "Verified",
+                "sslState": "[if(parameters('enableManagedCertificate'), 'SniEnabled', 'Disabled')]",
+                "thumbprint": "[if(parameters('enableManagedCertificate'), reference(resourceId('Microsoft.Web/certificates', variables('managedCertificateName')), '2023-12-01').thumbprint, null())]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/certificates', variables('managedCertificateName'))]",
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
             }
           ],
           "outputs": {
@@ -1222,6 +1339,10 @@
             "defaultHostName": {
               "type": "string",
               "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01').defaultHostName]"
+            },
+            "customHostName": {
+              "type": "string",
+              "value": "[if(variables('hasCustomHostName'), parameters('customHostName'), '')]"
             }
           }
         }
@@ -1302,7 +1423,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "1206280210402094293"
+              "templateHash": "8911377546284001923"
             }
           },
           "parameters": {
@@ -1351,6 +1472,20 @@
               "metadata": {
                 "description": "Resource tags"
               }
+            },
+            "customHostName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Custom hostname to bind to this App Service. Leave empty to skip custom-domain binding."
+              }
+            },
+            "enableManagedCertificate": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "When true, bind an App Service Managed Certificate to customHostName. Requires a prior deploy with customHostName bound and DNS validated."
+              }
             }
           },
           "variables": {
@@ -1367,7 +1502,9 @@
                 "name": "XDT_MicrosoftApplicationInsights_Mode",
                 "value": "Recommended"
               }
-            ]
+            ],
+            "hasCustomHostName": "[not(empty(parameters('customHostName')))]",
+            "managedCertificateName": "[format('cert-{0}', replace(parameters('customHostName'), '.', '-'))]"
           },
           "resources": [
             {
@@ -1393,6 +1530,34 @@
                   "appSettings": "[flatten(createArray(variables('platformSettings'), parameters('appSettings')))]"
                 }
               }
+            },
+            {
+              "condition": "[and(variables('hasCustomHostName'), parameters('enableManagedCertificate'))]",
+              "type": "Microsoft.Web/certificates",
+              "apiVersion": "2023-12-01",
+              "name": "[variables('managedCertificateName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "serverFarmId": "[parameters('appServicePlanId')]",
+                "canonicalName": "[parameters('customHostName')]"
+              }
+            },
+            {
+              "condition": "[variables('hasCustomHostName')]",
+              "type": "Microsoft.Web/sites/hostNameBindings",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('name'), parameters('customHostName'))]",
+              "properties": {
+                "siteName": "[parameters('name')]",
+                "hostNameType": "Verified",
+                "sslState": "[if(parameters('enableManagedCertificate'), 'SniEnabled', 'Disabled')]",
+                "thumbprint": "[if(parameters('enableManagedCertificate'), reference(resourceId('Microsoft.Web/certificates', variables('managedCertificateName')), '2023-12-01').thumbprint, null())]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/certificates', variables('managedCertificateName'))]",
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
             }
           ],
           "outputs": {
@@ -1411,6 +1576,10 @@
             "defaultHostName": {
               "type": "string",
               "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01').defaultHostName]"
+            },
+            "customHostName": {
+              "type": "string",
+              "value": "[if(variables('hasCustomHostName'), parameters('customHostName'), '')]"
             }
           }
         }
@@ -1478,7 +1647,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "1206280210402094293"
+              "templateHash": "8911377546284001923"
             }
           },
           "parameters": {
@@ -1527,6 +1696,20 @@
               "metadata": {
                 "description": "Resource tags"
               }
+            },
+            "customHostName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Custom hostname to bind to this App Service. Leave empty to skip custom-domain binding."
+              }
+            },
+            "enableManagedCertificate": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "When true, bind an App Service Managed Certificate to customHostName. Requires a prior deploy with customHostName bound and DNS validated."
+              }
             }
           },
           "variables": {
@@ -1543,7 +1726,9 @@
                 "name": "XDT_MicrosoftApplicationInsights_Mode",
                 "value": "Recommended"
               }
-            ]
+            ],
+            "hasCustomHostName": "[not(empty(parameters('customHostName')))]",
+            "managedCertificateName": "[format('cert-{0}', replace(parameters('customHostName'), '.', '-'))]"
           },
           "resources": [
             {
@@ -1569,6 +1754,34 @@
                   "appSettings": "[flatten(createArray(variables('platformSettings'), parameters('appSettings')))]"
                 }
               }
+            },
+            {
+              "condition": "[and(variables('hasCustomHostName'), parameters('enableManagedCertificate'))]",
+              "type": "Microsoft.Web/certificates",
+              "apiVersion": "2023-12-01",
+              "name": "[variables('managedCertificateName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "serverFarmId": "[parameters('appServicePlanId')]",
+                "canonicalName": "[parameters('customHostName')]"
+              }
+            },
+            {
+              "condition": "[variables('hasCustomHostName')]",
+              "type": "Microsoft.Web/sites/hostNameBindings",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('name'), parameters('customHostName'))]",
+              "properties": {
+                "siteName": "[parameters('name')]",
+                "hostNameType": "Verified",
+                "sslState": "[if(parameters('enableManagedCertificate'), 'SniEnabled', 'Disabled')]",
+                "thumbprint": "[if(parameters('enableManagedCertificate'), reference(resourceId('Microsoft.Web/certificates', variables('managedCertificateName')), '2023-12-01').thumbprint, null())]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/certificates', variables('managedCertificateName'))]",
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
             }
           ],
           "outputs": {
@@ -1587,6 +1800,10 @@
             "defaultHostName": {
               "type": "string",
               "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2023-12-01').defaultHostName]"
+            },
+            "customHostName": {
+              "type": "string",
+              "value": "[if(variables('hasCustomHostName'), parameters('customHostName'), '')]"
             }
           }
         }
@@ -1994,6 +2211,10 @@
     "webAppHostName": {
       "type": "string",
       "value": "[reference('webApp').outputs.defaultHostName.value]"
+    },
+    "storefrontCustomHostName": {
+      "type": "string",
+      "value": "[reference('webApp').outputs.customHostName.value]"
     },
     "apiAppHostName": {
       "type": "string",
