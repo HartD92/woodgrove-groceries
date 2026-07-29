@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Identity.Web;
+using Microsoft.Identity.Client;
+using System.Collections.Concurrent;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,6 +14,8 @@ namespace woodgrovedemo.Helpers
 {
     public class MsalAccessTokenHandler
     {
+        private static readonly ConcurrentDictionary<string, Lazy<IConfidentialClientApplication>> ConfidentialClientApplications = new();
+
         public static X509Certificate2 ReadCertificate(string certificateThumbprint)
         {
             if (string.IsNullOrWhiteSpace(certificateThumbprint))
@@ -67,6 +71,27 @@ namespace woodgrovedemo.Helpers
 
             try
             {
+                string? tenantId = GetConfiguredValue(configuration.GetSection("MicrosoftGraph:TenantId").Value);
+                string? clientId = GetConfiguredValue(configuration.GetSection("MicrosoftGraph:ClientId").Value);
+                string? clientSecret = GetConfiguredValue(configuration.GetSection("MicrosoftGraph:ClientSecret").Value);
+
+                if (!string.IsNullOrWhiteSpace(clientSecret))
+                {
+                    if (string.IsNullOrWhiteSpace(tenantId))
+                    {
+                        throw new ArgumentNullException(nameof(tenantId), "MicrosoftGraph:TenantId cannot be null or empty.");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(clientId))
+                    {
+                        throw new ArgumentNullException(nameof(clientId), "MicrosoftGraph:ClientId cannot be null or empty.");
+                    }
+
+                    var app = GetConfidentialClientApplication(clientId, clientSecret, tenantId);
+                    var result = await app.AcquireTokenForClient(scopes).ExecuteAsync();
+                    return (result.AccessToken, String.Empty, String.Empty);
+                }
+
                 AccessToken result = await CreateGraphCredential(configuration).GetTokenAsync(
                     new TokenRequestContext(scopes),
                     CancellationToken.None);
@@ -77,6 +102,19 @@ namespace woodgrovedemo.Helpers
             {
                 return (String.Empty, "500", "Something went wrong getting an access token for the client API:" + ex.Message);
             }
+        }
+
+        private static IConfidentialClientApplication GetConfidentialClientApplication(string clientId, string clientSecret, string tenantId)
+        {
+            return ConfidentialClientApplications.GetOrAdd(
+                clientId,
+                _ => new Lazy<IConfidentialClientApplication>(() =>
+                    ConfidentialClientApplicationBuilder
+                        .Create(clientId)
+                        .WithClientSecret(clientSecret)
+                        .WithAuthority(new Uri($"https://login.microsoftonline.com/{tenantId}/v2.0"))
+                        .Build()))
+                .Value;
         }
 
         private static TokenCredential CreateGraphCredential(IConfiguration configuration)
