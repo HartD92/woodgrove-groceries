@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "14247086334168715125"
+      "templateHash": "6185345322472657883"
     }
   },
   "parameters": {
@@ -1123,11 +1123,11 @@
               },
               {
                 "name": "MicrosoftGraph__ClientId",
-                "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.webClientId.value, ''), parameters('webClientId'))]"
+                "value": "[if(parameters('provisionEntraApps'), coalesce(reference('entraApps').outputs.graphClientId.value, ''), parameters('graphClientId'))]"
               },
               {
                 "name": "MicrosoftGraph__ClientSecret",
-                "value": "[variables('kvRefWebSecret')]"
+                "value": "[variables('kvRefGraphSecret')]"
               },
               {
                 "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
