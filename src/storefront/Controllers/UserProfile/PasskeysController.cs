@@ -298,6 +298,18 @@ public class PasskeysController : ControllerBase
         string graphApiBaseUrl = _configuration.GetSection("PasskeyManagement:GraphApiBaseUrl").Value ?? DefaultGraphApiBaseUrl;
         string accessToken = await MsalAccessTokenHandler.AcquireToken(_configuration);
 
+        try
+        {
+            string? iss = TryDecodeJwtClaim(accessToken, "iss");
+            string? aud = TryDecodeJwtClaim(accessToken, "aud");
+            string? configuredTenant = _configuration["MicrosoftGraph:TenantId"];
+            _telemetry.TrackTrace($"[Passkeys:Diag] Graph app-only token iss={iss} aud={aud} tenantId={configuredTenant}");
+        }
+        catch
+        {
+            // Diagnostic logging must never block the Graph call.
+        }
+
         // IHttpClientFactory manages connection pooling; do not dispose the client.
         var client = _httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(method, $"{graphApiBaseUrl.TrimEnd('/')}/{graphPath}");
@@ -305,6 +317,35 @@ public class PasskeysController : ControllerBase
         request.Content = content;
 
         return await client.SendAsync(request);
+    }
+
+    private static string? TryDecodeJwtClaim(string jwt, string claim)
+    {
+        try
+        {
+            string[] parts = jwt.Split('.');
+            if (parts.Length < 2)
+            {
+                return null;
+            }
+
+            string payload = parts[1].Replace('-', '+').Replace('_', '/');
+            int padding = payload.Length % 4;
+            if (padding > 0)
+            {
+                payload = payload.PadRight(payload.Length + (4 - padding), '=');
+            }
+
+            string json = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty(claim, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string ReadString(JsonElement element, string property)
