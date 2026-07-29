@@ -1,9 +1,9 @@
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Identity.Abstractions;
 using Microsoft.Identity.Web;
 using woodgrovedemo.Helpers;
 using woodgrovedemo.Models;
@@ -17,22 +17,15 @@ public class PasskeysController : ControllerBase
 {
     // NOTE: FIDO2 provisioning APIs are in Microsoft Graph beta as of 2026-07 and may change without deprecation notice.
     private const string DefaultGraphApiBaseUrl = "https://graph.microsoft.com/beta";
-    private static readonly string[] GraphDelegatedScopes = ["https://graph.microsoft.com/UserAuthenticationMethod.ReadWrite.All"];
     private readonly IConfiguration _configuration;
     private readonly TelemetryClient _telemetry;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IAuthorizationHeaderProvider _authorizationHeaderProvider;
 
-    public PasskeysController(
-        IConfiguration configuration,
-        TelemetryClient telemetry,
-        IHttpClientFactory httpClientFactory,
-        IAuthorizationHeaderProvider authorizationHeaderProvider)
+    public PasskeysController(IConfiguration configuration, TelemetryClient telemetry, IHttpClientFactory httpClientFactory)
     {
         _configuration = configuration;
         _telemetry = telemetry;
         _httpClientFactory = httpClientFactory;
-        _authorizationHeaderProvider = authorizationHeaderProvider;
     }
 
     [HttpGet]
@@ -80,9 +73,7 @@ public class PasskeysController : ControllerBase
         catch (Exception ex)
         {
             AppInsights.TrackException(_telemetry, ex, "Passkeys:List");
-            response.ErrorMessage = ex is MicrosoftIdentityWebChallengeUserException
-                ? GetGraphAuthorizationChallengeMessage(ex)
-                : "Can't read passkeys right now. Please try again.";
+            response.ErrorMessage = "Can't read passkeys right now. Please try again.";
         }
 
         return Ok(response);
@@ -146,12 +137,7 @@ public class PasskeysController : ControllerBase
         catch (Exception ex)
         {
             AppInsights.TrackException(_telemetry, ex, "Passkeys:CreationOptions");
-            return Ok(new PasskeyOperationResponse
-            {
-                ErrorMessage = ex is MicrosoftIdentityWebChallengeUserException
-                    ? GetGraphAuthorizationChallengeMessage(ex)
-                    : "Can't start passkey registration right now. Please try again."
-            });
+            return Ok(new PasskeyOperationResponse { ErrorMessage = "Can't start passkey registration right now. Please try again." });
         }
     }
 
@@ -208,12 +194,7 @@ public class PasskeysController : ControllerBase
         catch (Exception ex)
         {
             AppInsights.TrackException(_telemetry, ex, "Passkeys:Register");
-            return Ok(new PasskeyOperationResponse
-            {
-                ErrorMessage = ex is MicrosoftIdentityWebChallengeUserException
-                    ? GetGraphAuthorizationChallengeMessage(ex)
-                    : "Can't register passkey right now. Please try again."
-            });
+            return Ok(new PasskeyOperationResponse { ErrorMessage = "Can't register passkey right now. Please try again." });
         }
     }
 
@@ -257,12 +238,7 @@ public class PasskeysController : ControllerBase
         catch (Exception ex)
         {
             AppInsights.TrackException(_telemetry, ex, "Passkeys:Delete");
-            return Ok(new PasskeyOperationResponse
-            {
-                ErrorMessage = ex is MicrosoftIdentityWebChallengeUserException
-                    ? GetGraphAuthorizationChallengeMessage(ex)
-                    : "Can't delete passkey right now. Please try again."
-            });
+            return Ok(new PasskeyOperationResponse { ErrorMessage = "Can't delete passkey right now. Please try again." });
         }
     }
 
@@ -320,26 +296,15 @@ public class PasskeysController : ControllerBase
     private async Task<HttpResponseMessage> SendGraphRequestAsync(HttpMethod method, string graphPath, HttpContent? content = null)
     {
         string graphApiBaseUrl = _configuration.GetSection("PasskeyManagement:GraphApiBaseUrl").Value ?? DefaultGraphApiBaseUrl;
-        string authorizationHeader = await _authorizationHeaderProvider.CreateAuthorizationHeaderForUserAsync(GraphDelegatedScopes);
+        string accessToken = await MsalAccessTokenHandler.AcquireToken(_configuration);
 
         // IHttpClientFactory manages connection pooling; do not dispose the client.
         var client = _httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(method, $"{graphApiBaseUrl.TrimEnd('/')}/{graphPath}");
-        request.Headers.Add("Authorization", authorizationHeader);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         request.Content = content;
 
         return await client.SendAsync(request);
-    }
-
-    private static string GetGraphAuthorizationChallengeMessage(Exception ex)
-    {
-        if (ex is MicrosoftIdentityWebChallengeUserException challengeException &&
-            challengeException.MsalUiRequiredException.ErrorCode == "user_null")
-        {
-            return "The token cache does not contain the token to access Microsoft Graph. Sign out and sign in again to authorize passkey management.";
-        }
-
-        return "Sign in again to authorize passkey management.";
     }
 
     private static string ReadString(JsonElement element, string property)
