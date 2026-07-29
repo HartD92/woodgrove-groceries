@@ -285,8 +285,8 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__ClientCredentials__0__SourceType',     value: 'ClientSecret' }
       { name: 'AzureAd__ClientCredentials__0__ClientSecret',   value: kvRefWebSecret }
       { name: 'MicrosoftGraph__TenantId',                      value: tenantId }
-      { name: 'MicrosoftGraph__ClientId',                      value: resolvedWebClientId }
-      { name: 'MicrosoftGraph__ClientSecret',                  value: kvRefWebSecret }
+      { name: 'MicrosoftGraph__ClientId',                      value: resolvedGraphClientId }
+      { name: 'MicrosoftGraph__ClientSecret',                  value: kvRefGraphSecret }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING',         value: kvRefAppInsights }
       { name: 'WoodgroveGroceriesApi__BaseUrl',                value: 'api://woodgrove-groceries-api-${environmentName}' }
       { name: 'WoodgroveGroceriesApi__Scopes__0',              value: 'access_as_user' }
