@@ -92,11 +92,11 @@ namespace woodgrovedemo.Helpers
                     return (result.AccessToken, String.Empty, String.Empty);
                 }
 
-                AccessToken result = await CreateGraphCredential(configuration).GetTokenAsync(
+                AccessToken azureIdentityResult = await CreateGraphCredential(configuration).GetTokenAsync(
                     new TokenRequestContext(scopes),
                     CancellationToken.None);
 
-                return (result.Token, String.Empty, String.Empty);
+                return (azureIdentityResult.Token, String.Empty, String.Empty);
             }
             catch (Exception ex)
             {
