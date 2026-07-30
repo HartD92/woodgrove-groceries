@@ -1,13 +1,14 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Client;
+using Microsoft.Kiota.Abstractions;
+using Microsoft.Kiota.Abstractions.Authentication;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using System;
-using Azure.Core;
-using Azure.Identity;
 using Microsoft.Graph;
 
 namespace woodgrovedemo.Helpers
@@ -45,7 +46,7 @@ namespace woodgrovedemo.Helpers
                 scopes = new string[] { "https://graph.microsoft.com/.default" };
             }
 
-            var graphClient = new GraphServiceClient(CreateGraphCredential(configuration), scopes);
+            var graphClient = new GraphServiceClient(new MsalAuthenticationProvider(configuration, scopes));
 
             return graphClient;
         }
@@ -87,16 +88,32 @@ namespace woodgrovedemo.Helpers
                         throw new ArgumentNullException(nameof(clientId), "MicrosoftGraph:ClientId cannot be null or empty.");
                     }
 
-                    var app = GetConfidentialClientApplication(clientId, clientSecret, tenantId);
+                    var app = GetConfidentialClientApplicationWithSecret(clientId, clientSecret, tenantId);
                     var result = await app.AcquireTokenForClient(scopes).ExecuteAsync();
                     return (result.AccessToken, String.Empty, String.Empty);
                 }
 
-                AccessToken azureIdentityResult = await CreateGraphCredential(configuration).GetTokenAsync(
-                    new TokenRequestContext(scopes),
-                    CancellationToken.None);
+                if (string.IsNullOrWhiteSpace(tenantId))
+                {
+                    throw new ArgumentNullException(nameof(tenantId), "MicrosoftGraph:TenantId cannot be null or empty.");
+                }
 
-                return (azureIdentityResult.Token, String.Empty, String.Empty);
+                if (string.IsNullOrWhiteSpace(clientId))
+                {
+                    throw new ArgumentNullException(nameof(clientId), "MicrosoftGraph:ClientId cannot be null or empty.");
+                }
+
+                string? certificateThumbprint = GetConfiguredValue(configuration.GetSection("MicrosoftGraph:CertificateThumbprint").Value);
+                if (string.IsNullOrWhiteSpace(certificateThumbprint))
+                {
+                    throw new ArgumentNullException(nameof(certificateThumbprint), "Configure MicrosoftGraph:ClientSecret or MicrosoftGraph:CertificateThumbprint.");
+                }
+
+                X509Certificate2 certificate = ReadCertificate(certificateThumbprint);
+                var certificateApp = GetConfidentialClientApplicationWithCertificate(clientId, certificate, tenantId);
+                var certificateResult = await certificateApp.AcquireTokenForClient(scopes).ExecuteAsync();
+
+                return (certificateResult.AccessToken, String.Empty, String.Empty);
             }
             catch (Exception ex)
             {
@@ -104,10 +121,12 @@ namespace woodgrovedemo.Helpers
             }
         }
 
-        private static IConfidentialClientApplication GetConfidentialClientApplication(string clientId, string clientSecret, string tenantId)
+        private static IConfidentialClientApplication GetConfidentialClientApplicationWithSecret(string clientId, string clientSecret, string tenantId)
         {
+            string cacheKey = $"secret:{tenantId}:{clientId}";
+
             return ConfidentialClientApplications.GetOrAdd(
-                clientId,
+                cacheKey,
                 _ => new Lazy<IConfidentialClientApplication>(() =>
                     ConfidentialClientApplicationBuilder
                         .Create(clientId)
@@ -117,35 +136,19 @@ namespace woodgrovedemo.Helpers
                 .Value;
         }
 
-        private static TokenCredential CreateGraphCredential(IConfiguration configuration)
+        private static IConfidentialClientApplication GetConfidentialClientApplicationWithCertificate(string clientId, X509Certificate2 certificate, string tenantId)
         {
-            string? tenantId = GetConfiguredValue(configuration.GetSection("MicrosoftGraph:TenantId").Value);
-            string? clientId = GetConfiguredValue(configuration.GetSection("MicrosoftGraph:ClientId").Value);
-            string? clientSecret = GetConfiguredValue(configuration.GetSection("MicrosoftGraph:ClientSecret").Value);
+            string cacheKey = $"certificate:{tenantId}:{clientId}:{certificate.Thumbprint}";
 
-            if (string.IsNullOrWhiteSpace(tenantId))
-            {
-                throw new ArgumentNullException(nameof(tenantId), "MicrosoftGraph:TenantId cannot be null or empty.");
-            }
-
-            if (string.IsNullOrWhiteSpace(clientId))
-            {
-                throw new ArgumentNullException(nameof(clientId), "MicrosoftGraph:ClientId cannot be null or empty.");
-            }
-
-            if (!string.IsNullOrWhiteSpace(clientSecret))
-            {
-                return new ClientSecretCredential(tenantId, clientId, clientSecret);
-            }
-
-            string? certificateThumbprint = GetConfiguredValue(configuration.GetSection("MicrosoftGraph:CertificateThumbprint").Value);
-            if (string.IsNullOrWhiteSpace(certificateThumbprint))
-            {
-                throw new ArgumentNullException(nameof(certificateThumbprint), "Configure MicrosoftGraph:ClientSecret or MicrosoftGraph:CertificateThumbprint.");
-            }
-
-            X509Certificate2 certificate = ReadCertificate(certificateThumbprint);
-            return new ClientCertificateCredential(tenantId, clientId, certificate);
+            return ConfidentialClientApplications.GetOrAdd(
+                cacheKey,
+                _ => new Lazy<IConfidentialClientApplication>(() =>
+                    ConfidentialClientApplicationBuilder
+                        .Create(clientId)
+                        .WithCertificate(certificate)
+                        .WithAuthority(new Uri($"https://login.microsoftonline.com/{tenantId}/v2.0"))
+                        .Build()))
+                .Value;
         }
 
         private static string? GetConfiguredValue(string? value)
@@ -156,6 +159,32 @@ namespace woodgrovedemo.Helpers
             }
 
             return value;
+        }
+
+        private sealed class MsalAuthenticationProvider : IAuthenticationProvider
+        {
+            private readonly IConfiguration _configuration;
+            private readonly string[] _scopes;
+
+            public MsalAuthenticationProvider(IConfiguration configuration, string[] scopes)
+            {
+                _configuration = configuration;
+                _scopes = scopes;
+            }
+
+            public async Task AuthenticateRequestAsync(
+                RequestInformation request,
+                Dictionary<string, object>? additionalAuthenticationContext = null,
+                CancellationToken cancellationToken = default)
+            {
+                var accessToken = await GetAccessToken(_configuration, _scopes);
+                if (accessToken.token == String.Empty)
+                {
+                    throw new InvalidOperationException(String.Format("Failed to acquire access token: {0} : {1}", accessToken.error, accessToken.error_description));
+                }
+
+                request.Headers.Add("Authorization", $"Bearer {accessToken.token}");
+            }
         }
 
     }
