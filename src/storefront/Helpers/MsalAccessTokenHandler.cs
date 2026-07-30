@@ -183,6 +183,10 @@ namespace woodgrovedemo.Helpers
                     throw new InvalidOperationException(String.Format("Failed to acquire access token: {0} : {1}", accessToken.error, accessToken.error_description));
                 }
 
+                if (request.Headers.ContainsKey("Authorization"))
+                {
+                    request.Headers.Remove("Authorization");
+                }
                 request.Headers.Add("Authorization", $"Bearer {accessToken.token}");
             }
         }
