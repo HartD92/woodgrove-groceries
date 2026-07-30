@@ -298,6 +298,7 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'Cloudflare__ZoneId',                            value: cloudflareZoneId }
       { name: 'Cloudflare__ApiSecret',                         value: kvRefCloudflare }
       { name: 'Demos__CustomDomain',                           value: entraCustomDomainHost }
+      { name: 'PasskeyManagement__RpIdOverride',                value: entraCustomDomainHost }
       { name: 'AppRoles__PrincipalId',                         value: appRolesPrincipalId }
       { name: 'AppRoles__OrdersManager',                       value: appRolesOrdersManager }
       { name: 'AppRoles__ProductsContributor',                 value: appRolesProductsContributor }

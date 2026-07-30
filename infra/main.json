@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "6185345322472657883"
+      "templateHash": "6981360759545058704"
     }
   },
   "parameters": {
@@ -1171,6 +1171,10 @@
               },
               {
                 "name": "Demos__CustomDomain",
+                "value": "[parameters('entraCustomDomainHost')]"
+              },
+              {
+                "name": "PasskeyManagement__RpIdOverride",
                 "value": "[parameters('entraCustomDomainHost')]"
               },
               {

@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -126,6 +127,19 @@ public class PasskeysController : ControllerBase
                 // PasskeyOperationResponse with errorMessage instead. The client distinguishes the two shapes
                 // by the presence of errorMessage. Do not wrap in a typed envelope without a coordinated
                 // frontend change.
+                string? rpIdOverride = _configuration["PasskeyManagement:RpIdOverride"];
+                if (!string.IsNullOrWhiteSpace(rpIdOverride))
+                {
+                    var publicKeyObject = JsonNode.Parse(publicKey.GetRawText()) as JsonObject;
+                    if (publicKeyObject?["rp"] is JsonObject rpObject)
+                    {
+                        string? originalRpId = rpObject["id"]?.GetValue<string>();
+                        rpObject["id"] = rpIdOverride;
+                        _telemetry.TrackTrace($"[Passkeys:CreationOptions] rp.id overridden from '{originalRpId}' to '{rpIdOverride}'");
+                        return Ok(publicKeyObject);
+                    }
+                }
+
                 return Ok(publicKey.Clone());
             }
 
