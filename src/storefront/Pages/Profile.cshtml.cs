@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using Azure.Identity;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.AspNetCore.Authorization;
@@ -38,4 +37,3 @@ namespace MyApp.Namespace
         }
     }
 }
-
