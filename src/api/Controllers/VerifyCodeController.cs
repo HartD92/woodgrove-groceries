@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Identity.Abstractions;
 using Microsoft.Identity.Web;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace woodgrove_groceries_api.Controllers;
 
@@ -24,12 +26,12 @@ public class VerifyCodeController : ControllerBase
     }
 
     [HttpPost(Name = "VerifyCode")]
-    public async Task<VerifyCodeResponse> OnPostAsync([FromBody] VerifyCodeRequest request)
+    public Task<VerifyCodeResponse> OnPostAsync([FromBody] VerifyCodeRequest request)
     {
         // Check the user object ID
         if (User == null || User.GetObjectId() == null)
         {
-            return new VerifyCodeResponse("Error: User object ID is null");
+            return Task.FromResult(new VerifyCodeResponse("Error: User object ID is null"));
         }
 
         string userID = User.GetObjectId()!;
@@ -37,27 +39,25 @@ public class VerifyCodeController : ControllerBase
         response.ValidationPassed = false;
 
         // Try to get the cache object for the current user
-        if (_memoryCache.TryGetValue(userID, out AuthMethod cachedAuthMethod))
+        if (_memoryCache.TryGetValue(userID, out AuthMethod? cachedAuthMethod) && cachedAuthMethod is not null)
         {
             // Increase the number of user tries
             cachedAuthMethod.Validations++;
 
             if (IsAboveThreshold(cachedAuthMethod))
             {
-                return new VerifyCodeResponse("You have reached the maximum number of allowed verifications.");
+                _memoryCache.Remove(userID);
+                Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                return Task.FromResult(new VerifyCodeResponse("You have reached the maximum number of allowed verifications. Request a new code and try again."));
             }
 
-            // TBD: Compare Hash 
-            if (request.VerificationCode == cachedAuthMethod.VerificationCode)
+            if (VerificationCodeMatches(request.VerificationCode, cachedAuthMethod.VerificationCode))
             {
                 response.ValidationPassed = true;
                 response.AuthType = cachedAuthMethod.AuthType;
                 response.AuthValue = cachedAuthMethod.AuthValue;
 
-                // Update the verification code with a fresh random value to invalidate it
-                cachedAuthMethod.VerificationCode = Guid.NewGuid().ToString();
-                var cacheEntryOptions = new MemoryCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromHours(1));
-                _memoryCache.Set(userID, cachedAuthMethod, cacheEntryOptions);
+                _memoryCache.Remove(userID);
             }
             else
             {
@@ -66,7 +66,7 @@ public class VerifyCodeController : ControllerBase
             }
         }
 
-        return response;
+        return Task.FromResult(response);
     }
 
     private bool IsAboveThreshold(AuthMethod authMethod)
@@ -77,6 +77,16 @@ public class VerifyCodeController : ControllerBase
         // Check if the user's validation in the last hour reached the threshold
         return authMethod.Validations > maxRetry;
     }
+
+    internal static bool VerificationCodeMatches(string providedCode, string storedHashedCode)
+    {
+        if (string.IsNullOrWhiteSpace(providedCode) || string.IsNullOrWhiteSpace(storedHashedCode))
+        {
+            return false;
+        }
+
+        var providedHash = SHA256.HashData(Encoding.UTF8.GetBytes(providedCode));
+        var storedHash = Convert.FromHexString(storedHashedCode);
+        return CryptographicOperations.FixedTimeEquals(providedHash, storedHash);
+    }
 }
-
-

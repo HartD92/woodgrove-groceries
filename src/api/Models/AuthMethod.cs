@@ -1,6 +1,3 @@
-
-using System.Text.Json.Serialization;
-
 public enum AuthMethodType
 {
     SignInEmail,
@@ -10,11 +7,10 @@ public enum AuthMethodType
 
 public class AuthMethod
 {
-    public string UID { get; set; }
-    public string AuthValue { get; set; }
+    public string UID { get; set; } = string.Empty;
+    public string AuthValue { get; set; } = string.Empty;
     public AuthMethodType AuthType { get; set; }
-    public string VerificationCode { get; set; }
+    public string VerificationCode { get; set; } = string.Empty;
     public int MessagesSent { get; set; }
     public int Validations { get; set; }
 }
-
