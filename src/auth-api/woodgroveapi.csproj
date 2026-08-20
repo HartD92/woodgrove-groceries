@@ -7,6 +7,12 @@
     <AssemblyVersion>1.0.0.15</AssemblyVersion>
     <NoWarn>CS8618</NoWarn>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="woodgroveapi.Tests\**\*.cs" />
+    <Content Remove="woodgroveapi.Tests\**\*" />
+    <EmbeddedResource Remove="woodgroveapi.Tests\**\*" />
+    <None Remove="woodgroveapi.Tests\**\*" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Azure.Communication.Email" Version="1.1.0" />

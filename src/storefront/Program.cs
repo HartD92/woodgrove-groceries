@@ -70,37 +70,11 @@ foreach (var scheme in AuthScheme.All)
                   options.Events.OnTokenValidated += OnTokenValidatedFunc;
                   options.RemoteAuthenticationTimeout = TimeSpan.FromMinutes(30);
                   options.SaveTokens = true;
-
                   options.ForwardDefaultSelector = context =>
                     {
-                        string scheme = OpenIdConnectDefaults.AuthenticationScheme;
-
-                        // Check the scheme from the cookies (if exists)
-                        // This check is required for the sign-in postback and sign-out flows
-                        foreach (var item in context.Request.Cookies)
-                        {
-                            if (item.Key == ".AspNetCore.ArkoseFraudProtectionCookies")
-                            {
-                                scheme = AuthScheme.ArkoseFraudProtection;
-                                break;
-                            }
-                            else if (item.Key == ".AspNetCore.EmailOtpCookies")
-                            {
-                                scheme = AuthScheme.EmailOtp;
-                                break;
-                            }
-                        }
-
-                        string? handler = context.Request.Query["handler"];
-
-                        // Force change the scheme of explicitly requested by the sign-in
-                        if (handler != null && (handler == AuthScheme.ArkoseFraudProtection ||
-                            handler == AuthScheme.EmailOtp))
-                        {
-                            scheme = handler;
-                        }
-
-                        return scheme;
+                        return AuthSchemeSelector.Select(
+                            context.Request.Query["handler"].ToString(),
+                            context.Request.Cookies.Keys);
                     };
               });
 }
