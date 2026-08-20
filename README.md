@@ -16,6 +16,7 @@ This repository is a consolidated monorepo for the Woodgrove Groceries demo. The
 - src/api — the Woodgrove Groceries web API used by the storefront.
 - src/auth-api — the custom authentication extension API for Microsoft Entra External ID.
 - src/graph-middleware — the Microsoft Graph middleware service used by the demo flows.
+- src/migration — shared migration primitives plus bulk-import and JIT migration samples for External ID user migration demos.
 
 ### Related samples
 
