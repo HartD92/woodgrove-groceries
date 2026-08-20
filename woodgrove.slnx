@@ -5,11 +5,13 @@
   </Folder>
   <Folder Name="/src/auth-api/">
     <Project Path="src/auth-api/woodgroveapi.csproj" />
+    <Project Path="src/auth-api/woodgroveapi.Tests/woodgroveapi.Tests.csproj" />
   </Folder>
   <Folder Name="/src/graph-middleware/">
     <Project Path="src/graph-middleware/woodgrove-groceries-graph-middleware.csproj" />
   </Folder>
   <Folder Name="/src/storefront/">
     <Project Path="src/storefront/woodgrovedemo.csproj" />
+    <Project Path="src/storefront/woodgrovedemo.Tests/woodgrovedemo.Tests.csproj" />
   </Folder>
 </Solution>

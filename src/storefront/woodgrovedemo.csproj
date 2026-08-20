@@ -7,6 +7,12 @@
     <UserSecretsId>aspnet-woodgrovedemo-FBF1B85E-DADD-4187-9E01-DBB8923E80F7</UserSecretsId>
     <AssemblyVersion>1.0.2.6</AssemblyVersion>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="woodgrovedemo.Tests\**\*.cs" />
+    <Content Remove="woodgrovedemo.Tests\**\*" />
+    <EmbeddedResource Remove="woodgrovedemo.Tests\**\*" />
+    <None Remove="woodgrovedemo.Tests\**\*" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.23.0" />
