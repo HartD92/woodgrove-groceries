@@ -17,5 +17,7 @@
   <Folder Name="/src/migration/">
     <Project Path="src/migration/Woodgrove.Migration/Woodgrove.Migration.csproj" />
     <Project Path="src/migration/Woodgrove.Migration.Tests/Woodgrove.Migration.Tests.csproj" />
+    <Project Path="src/migration/Woodgrove.Migration.BulkImport/Woodgrove.Migration.BulkImport.csproj" />
+    <Project Path="src/migration/Woodgrove.Migration.BulkImport.Tests/Woodgrove.Migration.BulkImport.Tests.csproj" />
   </Folder>
 </Solution>
