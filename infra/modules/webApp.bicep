@@ -7,8 +7,8 @@ param location string
 @description('Resource ID of the hosting App Service Plan')
 param appServicePlanId string
 
-@description('.NET runtime version loaded by the Windows host for modern .NET apps (e.g. 10.0, 8.0)')
-param netFrameworkVersion string = '10.0'
+@description('.NET runtime version loaded by the Windows host for modern .NET apps (e.g. v10.0, v8.0)')
+param netFrameworkVersion string = 'v10.0'
 
 @description('''
 App settings array: [ { name: string, value: string }, ... ]

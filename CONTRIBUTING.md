@@ -68,7 +68,7 @@ To provide help page for your use case (recommented), do the following:
 
 ## Create a pull request
 
-When creating a pull request always set the target branch as **vNext**. Changes to this branch will be automatically deployed to the <https://private.woodgrovedemo.com>. So you can test it in the staging environment. After you confirm everything works as expected. Create another PR to merge the changes into the **main** branch.
+When creating a pull request, target the branch that matches the change you are contributing to. Do not rely on the legacy **vNext** branch or the private.woodgrovedemo.com staging site for validation; that workflow is no longer part of the repository. Validate your change locally and through the repository's current GitHub Actions workflows before merging to **main**.
 
 ## Deployment
 
