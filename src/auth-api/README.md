@@ -48,10 +48,10 @@ When the custom extension calls your REST API, it sends an HTTP Authorization he
 
 This example uses the [Microsoft.AspNetCore.Authentication.JwtBearer](https://www.nuget.org/packages/Microsoft.AspNetCore.Authentication.JwtBearer) library to validate the access token.
 
-This demo REST API can be used without authentication (see option 2 below). If you run your own REST API, uncomment the `[Authorize]` attribute in the controllers. The following example shows how a controller should look like:
+This demo REST API now keeps Microsoft Entra custom authentication extension endpoints protected in code by default. Each production callback controller uses ASP.NET Core bearer-token validation with the `EntraExternalIdCustomAuthToken` scheme configured in `Program.cs`. The following example shows the pattern used by the production webhook controllers:
 
 ```csharp
-[Authorize]
+[Authorize(AuthenticationSchemes = "EntraExternalIdCustomAuthToken")]
 [ApiController]
 [Route("[controller]")]
 public class TokenIssuanceStartController : ControllerBase
@@ -59,6 +59,8 @@ public class TokenIssuanceStartController : ControllerBase
     // Rest of your code
 }
 ```
+
+The bearer token validation should remain enabled for all production callback types because Microsoft Entra External ID sends the same kind of JWT bearer token to the configured REST API endpoint for custom authentication extension events. The API validates issuer metadata, audience, signature, lifetime, and the expected Microsoft Entra `azp` value.
 
 ### [Option 2] Validate the access token via Azure Service App
 
@@ -98,6 +100,11 @@ if (!AzureAppServiceClaimsHeader.Authorize(this.Request))
     return null;
 }
 ```
+
+In this project, the production controllers rely on the built-in `EntraExternalIdCustomAuthToken` JWT bearer scheme first, and keep the Easy Auth header check as an optional App Service-specific fallback/reference in comments. For local development, keep authorization enabled and test one of these ways:
+
+1. Configure `EntraExternalIdCustomAuthToken:MetadataAddress` and `Audience` in `appsettings.json` or user secrets to point at a real External ID tenant/app registration, then send a valid bearer token to the local endpoint.
+2. If you only need to exercise controller behavior without a production callback token, use the existing development-only temporary endpoints instead of disabling authorization on production webhook controllers.
 
 ### [Option 3] Validate the access token via Azure APIM
 
