@@ -1,0 +1,41 @@
+name: Squad CI
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - preview
+      - main
+      - insider
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Restore solution
+        run: dotnet restore woodgrove.slnx
+
+      - name: Build solution
+        run: dotnet build woodgrove.slnx --configuration Release --no-restore
+
+      - name: Test solution
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if dotnet sln woodgrove.slnx list | grep -Eiq '(^|[\\/])[^\\/]*(tests?|test)[^\\/]*\.csproj$'; then
+            dotnet test woodgrove.slnx --configuration Release --no-build
+          else
+            echo "No test projects found in woodgrove.slnx; skipping dotnet test."
+          fi
