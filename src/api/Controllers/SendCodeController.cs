@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Identity.Abstractions;
 using Microsoft.Identity.Web;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace woodgrove_groceries_api.Controllers;
 
@@ -15,7 +17,7 @@ public class SendCodeController : ControllerBase
     private readonly ILogger<SendCodeController> _logger;
     private readonly IConfiguration _configuration;
     private readonly IMemoryCache _memoryCache;
-    Random random = new Random();
+    private const int VerificationCodeDigits = 6;
 
     public SendCodeController(ILogger<SendCodeController> logger, IConfiguration configuration, IMemoryCache memoryCache)
     {
@@ -35,10 +37,10 @@ public class SendCodeController : ControllerBase
         }
 
         string userID = User.GetObjectId()!;
-        AuthMethod authMethod = null;
+        AuthMethod? authMethod = null;
 
         // Try to get the cache object for the current user
-        if (_memoryCache.TryGetValue(userID, out AuthMethod cachedAuthMethod))
+        if (_memoryCache.TryGetValue(userID, out AuthMethod? cachedAuthMethod))
         {
             // Get the value from the cache
             authMethod = cachedAuthMethod;
@@ -48,8 +50,10 @@ public class SendCodeController : ControllerBase
         if (authMethod == null)
         {
             // Init a new one
-            authMethod = new AuthMethod();
-            authMethod.UID = userID;
+            authMethod = new AuthMethod
+            {
+                UID = userID
+            };
         }
 
         // Set the values
@@ -58,7 +62,6 @@ public class SendCodeController : ControllerBase
         authMethod.MessagesSent++;
         // Reset the validations to zero
         authMethod.Validations = 0;
-        authMethod.VerificationCode = random.Next(112461, 989746).ToString();
 
         // Check if the user's validation in the last hour reached the threshold
         if (IsAboveThreshold(authMethod))
@@ -66,8 +69,10 @@ public class SendCodeController : ControllerBase
             return new SendCodeResponse("You have reached the number of verification code you can send. Please wait an hour and try again.");
         }
 
+        var verificationCode = GenerateVerificationCode();
+        authMethod.VerificationCode = HashVerificationCode(verificationCode);
+
         // Save data in cache
-        // TBD: Hash the pass code before adding it to the cache
         var cacheEntryOptions = new MemoryCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromHours(1));
         _memoryCache.Set(userID, authMethod, cacheEntryOptions);
 
@@ -75,7 +80,7 @@ public class SendCodeController : ControllerBase
         {
             try
             {
-                await SendEmailAsync(authMethod);
+                await SendEmailAsync(authMethod, verificationCode);
             }
             catch (System.Exception ex)
             {
@@ -91,16 +96,29 @@ public class SendCodeController : ControllerBase
     {
         // Get app settings
         int userThreshold = _configuration.GetValue<int>("AppSettings:UserThreshold", 3);
-        int AppThreshold = _configuration.GetValue<int>("AppSettings:AppThreshold", 60);
 
         // Check if the user's validation in the last hour reached the threshold
         return authMethod.MessagesSent > userThreshold;
     }
 
-    private async Task SendEmailAsync(AuthMethod authMethod)
+    private static string GenerateVerificationCode()
+    {
+        var maxValue = (int)Math.Pow(10, VerificationCodeDigits);
+        var code = RandomNumberGenerator.GetInt32(0, maxValue);
+        return code.ToString($"D{VerificationCodeDigits}");
+    }
+
+    internal static string HashVerificationCode(string verificationCode)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(verificationCode));
+        return Convert.ToHexString(hash);
+    }
+
+    private async Task SendEmailAsync(AuthMethod authMethod, string? plaintextCode = null)
     {
         string emailConnectionString = _configuration.GetSection("AppSettings:Email:ConnectionString").Value!;
         string emailSender = _configuration.GetSection("AppSettings:Email:Sender").Value!;
+        var codeForEmail = plaintextCode ?? string.Empty;
 
         try
         {
@@ -125,7 +143,7 @@ public class SendCodeController : ControllerBase
                     </tr>
                     <tr>
                         <td style='padding: 0px;font-family: &quot;Segoe UI Bold&quot;, &quot;Segoe UI Semibold&quot;, &quot;Segoe UI&quot;, &quot;Helvetica Neue Medium&quot;, Arial, sans-serif;font-size: 25px;font-weight: bold;color: white;padding-top: 5px;'>
-                        {authMethod.VerificationCode}</td>
+                        {codeForEmail}</td>
                         <td rowspan='3' style='text-align: center;'>
                             <img src='https://woodgrovedemo.com/custom-email/shopping.png' style='border-radius: 50%; width: 100px'>
                         </td>
