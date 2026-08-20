@@ -7,6 +7,10 @@
     <AssemblyVersion>1.0.0.15</AssemblyVersion>
     <NoWarn>CS8618</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="woodgroveapi.Tests" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Remove="woodgroveapi.Tests\**\*.cs" />
     <Content Remove="woodgroveapi.Tests\**\*" />
@@ -20,6 +24,10 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Logging.AzureAppServices" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\migration\Woodgrove.Migration\Woodgrove.Migration.csproj" />
   </ItemGroup>
 
 </Project>

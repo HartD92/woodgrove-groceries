@@ -407,6 +407,8 @@ Remove-Item auth-ext.json
 After creating the extension, wire it to your Entra External ID user flow in the portal:  
 **Entra External ID → User flows → [your flow] → Custom authentication extensions**.
 
+> `OnPasswordSubmit` is a special case for the JIT password-migration demo: as of this implementation, the extension registration uses the Graph **beta** endpoint (`POST https://graph.microsoft.com/beta/identity/customAuthenticationExtensions`) with `@odata.type = "#microsoft.graph.onPasswordSubmitCustomExtension"`. That beta-only registration is not automated by the repo's existing v1.0 setup flow or Bicep deployment.
+
 ---
 
 ## Post-Deploy: Configure Custom Domains
