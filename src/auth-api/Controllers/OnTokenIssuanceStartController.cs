@@ -9,7 +9,7 @@ using woodgroveapi.Models;
 namespace woodgroveapi.Controllers;
 
 
-//[Authorize]
+[Authorize(AuthenticationSchemes = "EntraExternalIdCustomAuthToken")]
 [ApiController]
 [Route("[controller]")]
 public class OnTokenIssuanceStartController : ControllerBase
