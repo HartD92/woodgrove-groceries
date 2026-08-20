@@ -8,12 +8,14 @@ To try out the demo environment, go to [Woodgrove Groceries](https://woodgrovede
 
 For more information about this demo application, read the [overview of the Woodgrove Groceries demo](https://learn.microsoft.com/entra/external-id/customers/overview-solutions-customers) article.
 
-## Related GitHub repossitories
+## Project structure
 
-- [Woodgrove custom authentication extension web API](https://github.com/microsoft/woodgrove-auth-api)
-- [Woodgrove Groceries web API](https://github.com/microsoft/woodgrove-groceries-api)
-- [Woodgrove Groceries middleware for Graph](https://github.com/microsoft/woodgrove-groceries-graph-middleware)
-- [Woodgrove Groceries clean up function](https://github.com/microsoft/woodgrove-groceries-clean-up/)
+This repository is a consolidated monorepo for the Woodgrove Groceries demo. The applications live under src/:
+
+- src/storefront — the Razor Pages storefront that demonstrates the customer-facing journeys.
+- src/api — the Woodgrove Groceries web API used by the storefront.
+- src/auth-api — the custom authentication extension API for Microsoft Entra External ID.
+- src/graph-middleware — the Microsoft Graph middleware service used by the demo flows.
 
 ### Related samples
 
@@ -37,6 +39,8 @@ This project welcomes contributions and suggestions from the community. We belie
 ## Privacy policy and terms of service
 
 Your privacy is important to us. Our [privacy statement](https://woodgrovedemo.com/Privacy) explains the personal data processed by the Woodgrove Groceries demo application, how we process it, and for what purposes. We also recommend that you check out our [terms of service](https://woodgrovedemo.com/TOS).
+
+
 
 
 
