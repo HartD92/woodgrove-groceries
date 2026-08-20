@@ -187,6 +187,7 @@ namespace woodgrovedemo.Helpers
                 {
                     request.Headers.Remove("Authorization");
                 }
+                // Keep the live bearer token on the outbound request; only logs should redact secrets.
                 request.Headers.Add("Authorization", $"Bearer {accessToken.token}");
             }
         }
