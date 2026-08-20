@@ -2,6 +2,7 @@
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Identity.Abstractions;
@@ -11,6 +12,7 @@ namespace woodgrovedemo.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "ExclusiveDemosOnly")]
 public class UserInsightsController : ControllerBase
 {
     private const string baseUrl = "https://graph.microsoft.com/beta/reports/userinsights";
