@@ -27,7 +27,7 @@ This section guides you through submitting an enhancement suggestion including c
 
 ## Building blocks
 
-This section provide details for the Woodgrove Groceries live demo app. This app is based on dotnet 8 web app with Razor pages. For the UI, the project uses Bootstrap 5.x, and JQuery.
+This section provide details for the Woodgrove Groceries live demo app. This app is based on .NET 10 web app with Razor pages. For the UI, the project uses Bootstrap 5.x, and JQuery.
 
 Every use case (demo) must have a unique **ID**, such as **MFA** (multifactor authentication), **CA** (conditional access), or **SSPR** (self-service password reset). The use case ID is used in the following files.
 

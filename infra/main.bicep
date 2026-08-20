@@ -272,7 +272,7 @@ module webApp 'modules/webApp.bicep' = {
     name: webAppName
     location: location
     appServicePlanId: plan.outputs.id
-    netFrameworkVersion: 'v8.0'
+    netFrameworkVersion: '10.0'
     websiteLoadCertificates: websiteLoadCertificates
     customHostName: storefrontCustomHostName
     enableManagedCertificate: enableStorefrontManagedCertificate
@@ -316,7 +316,7 @@ module apiApp 'modules/webApp.bicep' = {
     name: apiAppName
     location: location
     appServicePlanId: plan.outputs.id
-    netFrameworkVersion: 'v8.0'
+    netFrameworkVersion: '10.0'
     websiteLoadCertificates: websiteLoadCertificates
     tags: allTags
     appSettings: [
@@ -342,7 +342,7 @@ module graphApp 'modules/webApp.bicep' = {
     name: graphAppName
     location: location
     appServicePlanId: plan.outputs.id
-    netFrameworkVersion: 'v8.0'
+    netFrameworkVersion: '10.0'
     websiteLoadCertificates: websiteLoadCertificates
     tags: allTags
     appSettings: [
@@ -370,7 +370,7 @@ module authApp 'modules/webApp.bicep' = {
     name: authAppName
     location: location
     appServicePlanId: plan.outputs.id
-    netFrameworkVersion: 'v8.0'
+    netFrameworkVersion: '10.0'
     websiteLoadCertificates: websiteLoadCertificates
     tags: allTags
     appSettings: [
