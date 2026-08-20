@@ -14,4 +14,8 @@
     <Project Path="src/storefront/woodgrovedemo.csproj" />
     <Project Path="src/storefront/woodgrovedemo.Tests/woodgrovedemo.Tests.csproj" />
   </Folder>
+  <Folder Name="/src/migration/">
+    <Project Path="src/migration/Woodgrove.Migration/Woodgrove.Migration.csproj" />
+    <Project Path="src/migration/Woodgrove.Migration.Tests/Woodgrove.Migration.Tests.csproj" />
+  </Folder>
 </Solution>
