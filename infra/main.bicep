@@ -140,6 +140,10 @@ var acsName          = 'acs-woodgrove-${environmentName}-${uniqueSuffix}'
 var emailSvcName     = 'email-woodgrove-${environmentName}-${uniqueSuffix}'
 var entraAuthorityUrl = 'https://${entraCustomDomainHost}/${tenantId}/v2.0/'
 var entraInstanceUrl = 'https://${entraCustomDomainHost}/'
+// TODO(#48): JWT bearer validation currently assumes Entra External ID tokens are
+// issued from the CIAM origin host (ciamlogin.com), matching src/auth-api/appsettings.json.
+// If the custom domain becomes the token issuer, update this metadata endpoint accordingly.
+var entraExternalIdMetadataAddress = 'https://${entraOriginHost}/${tenantId}/v2.0/.well-known/openid-configuration'
 var resolvedFrontDoorProfileName = empty(frontDoorProfileName) ? 'afd-woodgrove-${environmentName}-${uniqueSuffix}' : frontDoorProfileName
 
 var allTags = union(tags, {
@@ -378,6 +382,15 @@ module authApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__ClientId',          value: resolvedAuthClientId }
       { name: 'AzureAd__Authority',         value: entraAuthorityUrl }
       { name: 'AzureAd__Instance',          value: entraInstanceUrl }
+      { name: 'EntraExternalIdCustomAuthToken__MetadataAddress', value: entraExternalIdMetadataAddress }
+      { name: 'EntraExternalIdCustomAuthToken__Audience',        value: resolvedAuthClientId }
+      { name: 'EntraExternalIdUserToken__MetadataAddress',       value: entraExternalIdMetadataAddress }
+      // TODO(#48): This uses the auth-api app registration client ID because
+      // src/storefront requests WoodgroveGroceriesAuthApi tokens for ActAsDemo and
+      // src/auth-api/appsettings.json models a GUID audience. Revisit if auth-api
+      // user tokens are later issued for a different resource/audience.
+      { name: 'EntraExternalIdUserToken__Audience',              value: resolvedAuthClientId }
+      { name: 'AppSettings__EmailConnectionString',              value: kvRefAcsConn }
       { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: kvRefAppInsights }
     ]
   }
