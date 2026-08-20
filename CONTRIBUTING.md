@@ -27,7 +27,7 @@ This section guides you through submitting an enhancement suggestion including c
 
 ## Building blocks
 
-This section provide details for the Woodgrove Groceries live demo app. This app is based on dotnet 8 web app with Razor pages. For the UI, the project uses Bootstrap 5.x, and JQuery.
+This section provide details for the Woodgrove Groceries live demo app. This app is based on .NET 10 web app with Razor pages. For the UI, the project uses Bootstrap 5.x, and JQuery.
 
 Every use case (demo) must have a unique **ID**, such as **MFA** (multifactor authentication), **CA** (conditional access), or **SSPR** (self-service password reset). The use case ID is used in the following files.
 
@@ -68,7 +68,7 @@ To provide help page for your use case (recommented), do the following:
 
 ## Create a pull request
 
-When creating a pull request always set the target branch as **vNext**. Changes to this branch will be automatically deployed to the <https://private.woodgrovedemo.com>. So you can test it in the staging environment. After you confirm everything works as expected. Create another PR to merge the changes into the **main** branch.
+When creating a pull request, target the branch that matches the change you are contributing to. Do not rely on the legacy **vNext** branch or the private.woodgrovedemo.com staging site for validation; that workflow is no longer part of the repository. Validate your change locally and through the repository's current GitHub Actions workflows before merging to **main**.
 
 ## Deployment
 

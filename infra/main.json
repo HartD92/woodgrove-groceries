@@ -5,8 +5,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.41.2.15936",
-      "templateHash": "6981360759545058704"
+      "version": "0.46.1.21595",
+      "templateHash": "11833137463594529249"
     }
   },
   "parameters": {
@@ -254,8 +254,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "7450211895977902770"
+              "version": "0.46.1.21595",
+              "templateHash": "3003078694173871068"
             }
           },
           "parameters": {
@@ -638,8 +638,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "11997739310808539244"
+              "version": "0.46.1.21595",
+              "templateHash": "4697560323220520895"
             }
           },
           "parameters": {
@@ -861,8 +861,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "14673550674518780734"
+              "version": "0.46.1.21595",
+              "templateHash": "16708921394966695977"
             }
           },
           "parameters": {
@@ -992,8 +992,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "10391113487225548429"
+              "version": "0.46.1.21595",
+              "templateHash": "7313411214433732543"
             }
           },
           "parameters": {
@@ -1077,7 +1077,7 @@
             "value": "[reference('plan').outputs.id.value]"
           },
           "netFrameworkVersion": {
-            "value": "v8.0"
+            "value": "v10.0"
           },
           "websiteLoadCertificates": {
             "value": "[parameters('websiteLoadCertificates')]"
@@ -1206,8 +1206,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "16364246561078071717"
+              "version": "0.46.1.21595",
+              "templateHash": "17593688920395190394"
             }
           },
           "parameters": {
@@ -1231,9 +1231,9 @@
             },
             "netFrameworkVersion": {
               "type": "string",
-              "defaultValue": "v8.0",
+              "defaultValue": "v10.0",
               "metadata": {
-                "description": ".NET Framework version loaded by the Windows host (e.g. v8.0, v6.0)"
+                "description": ".NET runtime version loaded by the Windows host for modern .NET apps (e.g. v10.0, v8.0)"
               }
             },
             "appSettings": {
@@ -1398,7 +1398,7 @@
             "value": "[reference('plan').outputs.id.value]"
           },
           "netFrameworkVersion": {
-            "value": "v8.0"
+            "value": "v10.0"
           },
           "websiteLoadCertificates": {
             "value": "[parameters('websiteLoadCertificates')]"
@@ -1457,8 +1457,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "16364246561078071717"
+              "version": "0.46.1.21595",
+              "templateHash": "17593688920395190394"
             }
           },
           "parameters": {
@@ -1482,9 +1482,9 @@
             },
             "netFrameworkVersion": {
               "type": "string",
-              "defaultValue": "v8.0",
+              "defaultValue": "v10.0",
               "metadata": {
-                "description": ".NET Framework version loaded by the Windows host (e.g. v8.0, v6.0)"
+                "description": ".NET runtime version loaded by the Windows host for modern .NET apps (e.g. v10.0, v8.0)"
               }
             },
             "appSettings": {
@@ -1650,7 +1650,7 @@
             "value": "[reference('plan').outputs.id.value]"
           },
           "netFrameworkVersion": {
-            "value": "v8.0"
+            "value": "v10.0"
           },
           "websiteLoadCertificates": {
             "value": "[parameters('websiteLoadCertificates')]"
@@ -1701,8 +1701,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "16364246561078071717"
+              "version": "0.46.1.21595",
+              "templateHash": "17593688920395190394"
             }
           },
           "parameters": {
@@ -1726,9 +1726,9 @@
             },
             "netFrameworkVersion": {
               "type": "string",
-              "defaultValue": "v8.0",
+              "defaultValue": "v10.0",
               "metadata": {
-                "description": ".NET Framework version loaded by the Windows host (e.g. v8.0, v6.0)"
+                "description": ".NET runtime version loaded by the Windows host for modern .NET apps (e.g. v10.0, v8.0)"
               }
             },
             "appSettings": {
@@ -1893,7 +1893,7 @@
             "value": "[reference('plan').outputs.id.value]"
           },
           "netFrameworkVersion": {
-            "value": "v8.0"
+            "value": "v10.0"
           },
           "websiteLoadCertificates": {
             "value": "[parameters('websiteLoadCertificates')]"
@@ -1932,8 +1932,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "16364246561078071717"
+              "version": "0.46.1.21595",
+              "templateHash": "17593688920395190394"
             }
           },
           "parameters": {
@@ -1957,9 +1957,9 @@
             },
             "netFrameworkVersion": {
               "type": "string",
-              "defaultValue": "v8.0",
+              "defaultValue": "v10.0",
               "metadata": {
-                "description": ".NET Framework version loaded by the Windows host (e.g. v8.0, v6.0)"
+                "description": ".NET runtime version loaded by the Windows host for modern .NET apps (e.g. v10.0, v8.0)"
               }
             },
             "appSettings": {
@@ -2141,8 +2141,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "750739688656757024"
+              "version": "0.46.1.21595",
+              "templateHash": "5279901787317634459"
             }
           },
           "parameters": {
@@ -2314,8 +2314,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "7428856110134837230"
+              "version": "0.46.1.21595",
+              "templateHash": "16109312547694620263"
             }
           },
           "parameters": {
@@ -2449,8 +2449,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "16909473458919805541"
+              "version": "0.46.1.21595",
+              "templateHash": "7397059031458197509"
             }
           },
           "parameters": {
