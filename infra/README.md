@@ -111,7 +111,7 @@ az account set --subscription "<subscription-id>"
 | Purpose | Tenant | GitHub variables | Permissions |
 |---|---|---|---|
 | Identity A — Azure resource deployment | Workforce tenant that owns the subscription | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | Azure RBAC: Contributor + User Access Administrator on the subscription |
-| Identity B — CIAM app registration provisioning | Entra External ID tenant | `ENTRA_CLIENT_ID`, `ENTRA_TENANT_ID` | Microsoft Graph app roles: `Application.ReadWrite.All`, `AppRoleAssignment.ReadWrite.All`, `DelegatedPermissionGrant.ReadWrite.All` |
+| Identity B — CIAM app registration provisioning | Entra External ID tenant | `ENTRA_CLIENT_ID`, `ENTRA_TENANT_ID` | Microsoft Graph app roles: `Application.ReadWrite.All`, `AppRoleAssignment.ReadWrite.All`, `DelegatedPermissionGrant.ReadWrite.All`, `Policy.ReadWrite.AuthenticationMethod` (required to enable Email OTP for SSPR — see § Self-service password reset) |
 
 ### Registering Identity A in the workforce tenant
 
@@ -465,10 +465,38 @@ After the cert syncs to App Service, **manually add its thumbprint to the graph-
 | `Application.ReadWrite.All` (application) | Creating/updating all 4 app registrations + SPs |
 | `AppRoleAssignment.ReadWrite.All` (application) | Granting admin consent for graph-middleware MS Graph app roles |
 | `DelegatedPermissionGrant.ReadWrite.All` (application) | Creating delegated OAuth2 grants for web → API scopes |
+| `Policy.ReadWrite.AuthenticationMethod` (application) | Enabling the Email OTP authentication method tenant-wide for self-service password reset (SSPR) |
 | **Azure Contributor** on subscription | Creating all Azure resources |
 | **User Access Administrator** on subscription | Creating Key Vault RBAC role assignments |
 
 > David: If the deployer identity only has `Application.ReadWrite.All`, the app registrations will be created/updated correctly but admin consent for graph-middleware Graph permissions must be granted manually in the Entra portal.
+
+---
+
+## Post-Deploy: Self-Service Password Reset (SSPR)
+
+The `entra-provision` job automatically `PATCH`es
+`https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy/authenticationMethodConfigurations/email`
+to enable the **Email OTP** authentication method tenant-wide
+(`allowExternalIdToUseEmailOtp: default`, targeting `all_users`). This is the
+authentication-method prerequisite for SSPR described in
+`src/storefront/Areas/Help/Pages/SSPR.cshtml`.
+
+This automates step 2–4 of that help page. Two steps remain **manual** because
+they are not exposed via Microsoft Graph as of this writing:
+
+1. Confirm the sign-up/sign-in user flow registers **Email with password** as an
+   identity provider (Entra admin center → External Identities → User flows →
+   your flow → Identity providers). This repo's app/user-flow provisioning does
+   not manage user-flow identity-provider selection.
+2. Enable **"Show self-service password reset"** in Company Branding → Sign-in
+   form (Entra admin center → Identity → User experience → Company Branding).
+   The `organizationalBranding` Graph API does not currently expose this
+   toggle, so it must be enabled by hand.
+
+If the deployer identity lacks `Policy.ReadWrite.AuthenticationMethod`, the
+Email OTP PATCH step logs a warning and continues (non-fatal) — enable Email
+OTP manually per `SSPR.cshtml` steps 3–4 in that case.
 
 ---
 
