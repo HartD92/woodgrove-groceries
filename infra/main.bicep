@@ -140,10 +140,17 @@ var acsName          = 'acs-woodgrove-${environmentName}-${uniqueSuffix}'
 var emailSvcName     = 'email-woodgrove-${environmentName}-${uniqueSuffix}'
 var entraAuthorityUrl = 'https://${entraCustomDomainHost}/${tenantId}/v2.0/'
 var entraInstanceUrl = 'https://${entraCustomDomainHost}/'
-// TODO(#48): JWT bearer validation currently assumes Entra External ID tokens are
-// issued from the CIAM origin host (ciamlogin.com), matching src/auth-api/appsettings.json.
-// If the custom domain becomes the token issuer, update this metadata endpoint accordingly.
-var entraExternalIdMetadataAddress = 'https://${entraOriginHost}/${tenantId}/v2.0/.well-known/openid-configuration'
+// Custom authentication extension callbacks (OnTokenIssuanceStart, OnAttributeCollection*,
+// onPageRenderStart) are invoked by Microsoft's first-party "Azure AD Authentication
+// Extensions" app (appId 99045fe1-7639-4a75-9d4a-577b6ca3810f). That app authenticates
+// with a standard Microsoft Entra ID app-only token issued from
+// login.microsoftonline.com — NOT from the tenant's CIAM origin host (ciamlogin.com),
+// which only issues tokens for end-user sign-in flows. Validating the custom-extension
+// bearer token against the CIAM metadata endpoint causes issuer/signing-key validation
+// to fail, so Entra reports the webhook call as unauthorized during sign-in (surfaces to
+// users as AADSTS1100001 / underlying error 1003002), including for passkey sign-in.
+// See: https://learn.microsoft.com/entra/identity-platform/custom-extension-overview
+var entraExternalIdMetadataAddress = 'https://login.microsoftonline.com/${tenantId}/v2.0/.well-known/openid-configuration'
 var resolvedFrontDoorProfileName = empty(frontDoorProfileName) ? 'afd-woodgrove-${environmentName}-${uniqueSuffix}' : frontDoorProfileName
 
 var allTags = union(tags, {
