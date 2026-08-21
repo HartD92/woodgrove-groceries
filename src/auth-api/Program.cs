@@ -48,6 +48,21 @@ builder.Services.AddAuthentication()
                     context!.Fail("Invalid azp claim value");
                 }
                 return Task.CompletedTask;
+            },
+            OnAuthenticationFailed = context =>
+            {
+                var loggerFactory = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>();
+                var logger = loggerFactory.CreateLogger("woodgroveapi.Authentication.EntraExternalIdCustomAuthToken");
+                logger.LogError(context.Exception, "EntraExternalIdCustomAuthToken authentication failed: {Message}", context.Exception.Message);
+                return Task.CompletedTask;
+            },
+            OnChallenge = context =>
+            {
+                var loggerFactory = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>();
+                var logger = loggerFactory.CreateLogger("woodgroveapi.Authentication.EntraExternalIdCustomAuthToken");
+                logger.LogError("EntraExternalIdCustomAuthToken challenge issued. Error: {Error}, ErrorDescription: {ErrorDescription}, AuthFailure: {AuthFailure}",
+                    context.Error, context.ErrorDescription, context.AuthenticateFailure?.Message);
+                return Task.CompletedTask;
             }
         };
     });
