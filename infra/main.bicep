@@ -148,15 +148,16 @@ var entraExternalIdMetadataAddress = 'https://${entraOriginHost}/${tenantId}/v2.
 // Microsoft's first-party "Azure AD Authentication Extensions" app
 // (appId 99045fe1-7639-4a75-9d4a-577b6ca3810f) when it calls our custom authentication
 // extension callbacks (OnTokenIssuanceStart, OnAttributeCollectionStart/Submit,
-// onPageRenderStart). That app authenticates with a standard Microsoft Entra ID
-// app-only token issued from login.microsoftonline.com — NOT from the tenant's CIAM
-// origin host, which only issues tokens for end-user sign-in flows. Validating the
-// custom-extension bearer token against the CIAM metadata endpoint (as before this fix)
-// causes issuer/signing-key validation to fail, so Entra reports the webhook call as
-// unauthorized during sign-in (surfaces to users as AADSTS1100001 / underlying error
-// 1003002), including for passkey sign-in.
+// onPageRenderStart). CONFIRMED via a live IDX10205 issuer-validation failure log that
+// this token's actual `iss` claim is the tenant's CIAM origin host (ciamlogin.com), NOT
+// login.microsoftonline.com — the opposite of what was assumed in the prior fix (#76).
+// That prior fix pointed this metadata address at login.microsoftonline.com, which
+// caused every custom-extension call to fail issuer validation (401), surfacing to
+// users as AADSTS1100001 / underlying error 1003002 (CustomExtensionInvalidHTTPStatus),
+// including for passkey sign-in. Reverting to the CIAM origin host, matching the actual
+// observed issuer.
 // See: https://learn.microsoft.com/entra/identity-platform/custom-extension-overview
-var entraExternalIdCustomAuthMetadataAddress = 'https://login.microsoftonline.com/${tenantId}/v2.0/.well-known/openid-configuration'
+var entraExternalIdCustomAuthMetadataAddress = 'https://${entraOriginHost}/${tenantId}/v2.0/.well-known/openid-configuration'
 var resolvedFrontDoorProfileName = empty(frontDoorProfileName) ? 'afd-woodgrove-${environmentName}-${uniqueSuffix}' : frontDoorProfileName
 
 var allTags = union(tags, {

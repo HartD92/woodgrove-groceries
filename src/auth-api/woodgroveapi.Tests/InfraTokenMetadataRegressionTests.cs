@@ -12,16 +12,17 @@ namespace woodgroveapi.Tests;
 ///   first-party "Azure AD Authentication Extensions" app (appId
 ///   99045fe1-7639-4a75-9d4a-577b6ca3810f) when it invokes our custom authentication
 ///   extension callbacks (OnTokenIssuanceStart, OnAttributeCollectionStart/Submit,
-///   onPageRenderStart). That token is issued from login.microsoftonline.com.
+///   onPageRenderStart).
 /// - EntraExternalIdUserToken validates bearer tokens issued to real end users
-///   (e.g. ActAsDemoController), which ARE issued from the tenant's CIAM origin host
-///   (ciamlogin.com).
+///   (e.g. ActAsDemoController).
 ///
-/// These two schemes must never be pointed at the same metadata address/issuer host,
-/// or one of the two callers will fail JWT issuer/signing-key validation and get
-/// rejected with 401 -- which Entra surfaces to end users as AADSTS1100001 during
-/// sign-in (including passkey sign-in, since OnTokenIssuanceStart fires on every
-/// sign-in).
+/// CONFIRMED via a live IDX10205 issuer-validation failure log that both of these
+/// bearer tokens are actually issued from the tenant's CIAM origin host
+/// (ciamlogin.com/entraOriginHost) -- an earlier fix (#76) incorrectly pointed the
+/// custom-auth scheme at login.microsoftonline.com instead, which caused every
+/// custom-extension call to fail issuer validation (401), surfacing to end users as
+/// AADSTS1100001 during sign-in (including passkey sign-in, since OnTokenIssuanceStart
+/// fires on every sign-in).
 /// </summary>
 public class InfraTokenMetadataRegressionTests
 {
@@ -41,26 +42,7 @@ public class InfraTokenMetadataRegressionTests
     }
 
     [Fact]
-    public void CustomAuthToken_And_UserToken_MetadataAddresses_MustNotShareTheSameVariable()
-    {
-        string bicep = ReadMainBicep();
-
-        var customAuthMatch = Regex.Match(bicep,
-            @"\{\s*name:\s*'EntraExternalIdCustomAuthToken__MetadataAddress',\s*value:\s*(\w+)\s*\}");
-        var userTokenMatch = Regex.Match(bicep,
-            @"\{\s*name:\s*'EntraExternalIdUserToken__MetadataAddress',\s*value:\s*(\w+)\s*\}");
-
-        Assert.True(customAuthMatch.Success, "Could not find EntraExternalIdCustomAuthToken__MetadataAddress app setting in infra/main.bicep.");
-        Assert.True(userTokenMatch.Success, "Could not find EntraExternalIdUserToken__MetadataAddress app setting in infra/main.bicep.");
-
-        string customAuthVariable = customAuthMatch.Groups[1].Value;
-        string userTokenVariable = userTokenMatch.Groups[1].Value;
-
-        Assert.NotEqual(userTokenVariable, customAuthVariable);
-    }
-
-    [Fact]
-    public void CustomAuthToken_MetadataAddress_MustResolveToLoginMicrosoftOnline()
+    public void CustomAuthToken_MetadataAddress_MustResolveToCiamOriginHost()
     {
         string bicep = ReadMainBicep();
 
@@ -76,8 +58,12 @@ public class InfraTokenMetadataRegressionTests
 
         string variableValue = variableDeclMatch.Groups[1].Value;
 
-        Assert.Contains("login.microsoftonline.com", variableValue);
-        Assert.DoesNotContain("ciamlogin.com", variableValue);
+        // The custom-extension caller's bearer token is issued from the tenant's CIAM
+        // origin host (confirmed via a live IDX10205 issuer mismatch log showing
+        // iss = https://{tenantId}.ciamlogin.com/{tenantId}/v2.0), not from
+        // login.microsoftonline.com.
+        Assert.Contains("entraOriginHost", variableValue);
+        Assert.DoesNotContain("login.microsoftonline.com", variableValue);
     }
 
     [Fact]
@@ -98,8 +84,7 @@ public class InfraTokenMetadataRegressionTests
         string variableValue = variableDeclMatch.Groups[1].Value;
 
         // The user token scheme validates real end-user sign-in tokens, which are
-        // issued from the tenant's CIAM origin host (entraOriginHost), not from
-        // login.microsoftonline.com.
+        // issued from the tenant's CIAM origin host (entraOriginHost).
         Assert.Contains("entraOriginHost", variableValue);
     }
 }
