@@ -822,6 +822,45 @@ jobs:
             Write-Warning "Could not enable Email OTP authentication method (requires Policy.ReadWrite.AuthenticationMethod on the deployer identity). Enable it manually — see src/storefront/Areas/Help/Pages/SSPR.cshtml. Error: $($_.Exception.Message)"
           }
 
+          # Enable the SMS authentication method for a dedicated demo group -- see
+          # src/storefront/Areas/Help/Pages/SmsAuthentication.cshtml.
+          #
+          # Unlike Email OTP, SMS's includeTargets does NOT support a synthetic
+          # "allUsers" target -- it only accepts a real Entra group object ID
+          # (targetType 'group'). We provision/reuse a dedicated security group here
+          # rather than trying to enumerate all tenant users into it automatically;
+          # add users to 'Woodgrove SMS Authentication' in the Entra admin center to
+          # opt them in.
+          #
+          # Also requires Policy.ReadWrite.AuthenticationMethod on the deployer
+          # identity, and the CIAM tenant must already be linked to an Azure
+          # subscription with billing enabled -- SMS is a pay-as-you-go premium add-on,
+          # unlike Email OTP which is included in base MAU billing. Neither the
+          # permission grant nor the billing link can be completed via this Graph call;
+          # if either prerequisite is missing, log a warning and continue rather than
+          # failing the deployment.
+          try {
+            $smsAuthGroupId = Ensure-SecurityGroup -DisplayName 'Woodgrove SMS Authentication' -MailNickname 'woodgroveSmsAuthentication'
+            Invoke-GraphPatch `
+              -Uri 'https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy/authenticationMethodConfigurations/sms' `
+              -Body ([ordered]@{
+                '@odata.type' = '#microsoft.graph.smsAuthenticationMethodConfiguration'
+                state = 'enabled'
+                excludeTargets = @()
+                includeTargets = @(
+                  [ordered]@{
+                    targetType = 'group'
+                    id = $smsAuthGroupId
+                    isUsableForSignIn = $false
+                  }
+                )
+              })
+            Write-Host "SMS authentication method enabled for group 'Woodgrove SMS Authentication' ($smsAuthGroupId)."
+          }
+          catch {
+            Write-Warning "Could not enable SMS authentication method (requires Policy.ReadWrite.AuthenticationMethod on the deployer identity, and the CIAM tenant must be linked to an Azure subscription for pay-as-you-go SMS billing). Enable it manually -- see src/storefront/Areas/Help/Pages/SmsAuthentication.cshtml. Error: $($_.Exception.Message)"
+          }
+
           "web_client_id=$($webApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "api_client_id=$($apiApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "graph_client_id=$($graphApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8

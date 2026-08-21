@@ -1,0 +1,147 @@
+@page
+@model woodgrovedemo.Help.Pages.SmsAuthenticationModel
+
+@{
+    ViewData["Title"] = "SMS authentication";
+    Layout = "_Layout";
+}
+
+<h1 style="margin-top: 25px; margin-bottom: 25px;">Enable SMS authentication</h1>
+
+<p>
+    Microsoft Entra External ID can send a one-time passcode by text message (SMS)
+    as an authentication method — for example, as a second factor for
+    sign-in/MFA. This demo's deployment automation enables the SMS authentication
+    method and provisions a dedicated group so you can opt users in, but two
+    prerequisites can't be automated via Microsoft Graph and must be completed by
+    hand.
+</p>
+
+<div class="alert alert-warning" role="alert">
+    <h4 class="alert-heading">SMS is a paid, pay-as-you-go feature</h4>
+    <p class="mb-0">
+        Unlike Email OTP (used for self-service password reset, included in base
+        billing), SMS/voice authentication is billed per-message on a
+        pay-as-you-go basis. Before SMS can be used, the Entra External ID (CIAM)
+        tenant must be linked to an Azure subscription with billing enabled.
+    </p>
+</div>
+
+@await Html.PartialAsync("_HelpSelector.cshtml", 1)
+<div class="tab-content wg-tab-content">
+    <div class="tab-pane active" id="microsoftEntraAdminCenter" role="tabpanel"
+        aria-labelledby="microsoftEntraAdminCenter-tab" tabindex="0">
+
+        @await Html.PartialAsync("_StepsButtons.cshtml")
+
+        <div class="bs-stepper vertical" id="Stepper">
+            @await Html.PartialAsync("_Steps.cshtml", 4)
+
+            <div class="bs-stepper-content">
+                <div id="step-1" role="tabpanel" class="bs-stepper-pane fade active" aria-labelledby="steppertrigger1">
+                    @await Html.PartialAsync("_Prerequisites.cshtml")
+
+                    <h4>Link the tenant to an Azure subscription for billing</h4>
+                    <p>
+                        Sign in to the <a href="https://entra.microsoft.com/" target="_blank"
+                            class="link-dark link-offset-2">Microsoft Entra admin center</a> for your
+                        External ID (CIAM) tenant. Browse to your tenant's overview page and confirm
+                        (or link) an associated Azure subscription with billing enabled — this is
+                        required before SMS can be used, regardless of how the authentication method
+                        itself is configured.
+                    </p>
+                </div>
+
+                <div id="step-2" role="tabpanel" class="bs-stepper-pane fade" aria-labelledby="steppertrigger2">
+                    <h4>Confirm SMS is enabled in Authentication methods</h4>
+                    <p>
+                        This demo's deployment pipeline (<code>deploy-infra.yml</code>) automatically
+                        enables the SMS authentication method for a dedicated group named
+                        <b>Woodgrove SMS Authentication</b>, by calling Microsoft Graph:
+                    </p>
+                    <code style="color: black;">PATCH https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy/authenticationMethodConfigurations/sms</code>
+                    <p class="mt-3">
+                        You can confirm this took effect by browsing to
+                        <b>Identity</b> &gt; <b>Protection</b> &gt; <b>Authentication methods</b> &gt;
+                        <b>Policies</b> &gt; <b>SMS</b> and checking that the
+                        <b>Woodgrove SMS Authentication</b> group is listed under <b>Include</b>.
+                    </p>
+                    <p>
+                        If the deployer identity used by the pipeline lacked the
+                        <code>Policy.ReadWrite.AuthenticationMethod</code> Graph permission, or the
+                        tenant wasn't yet linked to a subscription (step 1), this step logs a warning
+                        and continues rather than failing the deployment — you can enable SMS manually
+                        here instead.
+                    </p>
+                </div>
+
+                <div id="step-3" role="tabpanel" class="bs-stepper-pane fade" aria-labelledby="steppertrigger3">
+                    <h4>Add users to the SMS authentication group</h4>
+                    <p>
+                        Unlike Email OTP, the SMS authentication method's target does <b>not</b>
+                        support a synthetic "all users" option — Microsoft Graph only accepts a real
+                        group object ID. This means SMS is opt-in by design: no user is enrolled by
+                        default.
+                    </p>
+                    <p>
+                        Browse to <b>Identity</b> &gt; <b>Groups</b> &gt; <b>All groups</b>, select
+                        <b>Woodgrove SMS Authentication</b>, then <b>Members</b> &gt; <b>Add members</b>
+                        to opt a test user in.
+                    </p>
+                </div>
+
+                <div id="step-4" role="tabpanel" class="bs-stepper-pane fade" aria-labelledby="steppertrigger4">
+                    <h4>Add a phone number to the test user</h4>
+                    <p>
+                        The opted-in user needs a registered phone authentication method before SMS
+                        sign-in/verification will work. Browse to <b>Identity</b> &gt; <b>Users</b>,
+                        select the test user, then <b>Authentication methods</b> &gt;
+                        <b>Add authentication method</b> &gt; <b>Phone</b>, and enter a mobile number.
+                    </p>
+
+                    <div class="alert alert-success" role="alert">
+                        <h4 class="alert-heading">Well done!</h4>
+                        <p class="mb-0">
+                            The user can now use SMS as an authentication method where your user flow
+                            or Conditional Access policy allows it.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="tab-pane" id="microsoftGraph" role="tabpanel" aria-labelledby="microsoftGraph-tab" tabindex="0">
+
+        <h4 class="graph-header graph-header-space">Enable SMS authentication method for a group</h4>
+
+        <p>
+            The following Graph call enables the SMS authentication method for a specific
+            group (used by this repo's deployment automation instead of an "all users" target,
+            which the SMS authentication method configuration does not support).
+        </p>
+
+        <code
+            style="color: black;">PATCH https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy/authenticationMethodConfigurations/sms</code>
+
+        <pre>
+{
+    "state": "enabled",
+    "excludeTargets": [],
+    "includeTargets": [
+        {
+            "targetType": "group",
+            "id": "&lt;woodgrove-sms-authentication-group-object-id&gt;",
+            "isUsableForSignIn": false
+        }
+    ]
+}
+        </pre>
+    </div>
+
+    <div class="tab-pane" id="entraGraphPowerShell" role="tabpanel" aria-labelledby="entraGraphPowerShell-tab"
+        tabindex="0">
+        Loading...
+    </div>
+</div>
