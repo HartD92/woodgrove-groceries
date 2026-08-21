@@ -465,7 +465,7 @@ After the cert syncs to App Service, **manually add its thumbprint to the graph-
 | `Application.ReadWrite.All` (application) | Creating/updating all 4 app registrations + SPs |
 | `AppRoleAssignment.ReadWrite.All` (application) | Granting admin consent for graph-middleware MS Graph app roles |
 | `DelegatedPermissionGrant.ReadWrite.All` (application) | Creating delegated OAuth2 grants for web → API scopes |
-| `Policy.ReadWrite.AuthenticationMethod` (application) | Enabling the Email OTP authentication method tenant-wide for self-service password reset (SSPR) |
+| `Policy.ReadWrite.AuthenticationMethod` (application) | Enabling the Email OTP and SMS authentication methods for self-service password reset (SSPR) and SMS sign-in |
 | **Azure Contributor** on subscription | Creating all Azure resources |
 | **User Access Administrator** on subscription | Creating Key Vault RBAC role assignments |
 
@@ -497,6 +497,45 @@ they are not exposed via Microsoft Graph as of this writing:
 If the deployer identity lacks `Policy.ReadWrite.AuthenticationMethod`, the
 Email OTP PATCH step logs a warning and continues (non-fatal) — enable Email
 OTP manually per `SSPR.cshtml` steps 3–4 in that case.
+
+---
+
+## Post-Deploy: SMS Authentication
+
+The `entra-provision` job also creates/reuses a dedicated security group
+(**"Woodgrove SMS Authentication"**, `mailNickname: woodgroveSmsAuthentication`)
+and `PATCH`es
+`https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy/authenticationMethodConfigurations/sms`
+to enable the **SMS** authentication method for that group.
+
+Unlike Email OTP, SMS's `includeTargets` does **not** support a synthetic
+"all users" target — the Graph API only accepts a real Entra group object ID
+(`targetType: 'group'`). This means SMS is opt-in: no users are enrolled by
+default. To let a user sign in / verify with SMS, add them to the
+**"Woodgrove SMS Authentication"** group in the Entra admin center (Groups →
+find the group → Members → Add members).
+
+Two manual prerequisites are **not** automatable via Graph and must be
+completed once, by hand, before the SMS PATCH will succeed:
+
+1. **Link the CIAM tenant to an Azure subscription with billing enabled.**
+   Unlike Email OTP (included in base MAU billing), SMS/voice authentication
+   is a **pay-as-you-go premium add-on** billed per-transaction. Entra admin
+   center → tenant overview → link/verify the associated Azure subscription.
+2. The deployer identity needs `Policy.ReadWrite.AuthenticationMethod` (same
+   permission Email OTP uses — see § Minimum permissions above).
+
+If either prerequisite is missing, the SMS PATCH step logs a warning and
+continues (non-fatal) rather than failing the deployment — enable SMS
+manually afterward per
+`src/storefront/Areas/Help/Pages/SmsAuthentication.cshtml`.
+
+> Note: as of this writing, Microsoft's Feb 2027 retirement of
+> Microsoft-provided SMS/voice authentication applies to **workforce**
+> tenants only — Entra External ID (CIAM) and Azure AD B2C tenants are
+> explicitly excluded from that timeline (see
+> [the FAQ](https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sms-voice-retirement-faq)).
+> No retirement date has been announced for CIAM/B2C at this time.
 
 ---
 
