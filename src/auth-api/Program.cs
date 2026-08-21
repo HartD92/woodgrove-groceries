@@ -14,7 +14,11 @@ builder.Services.Configure<AzureFileLoggerOptions>(options =>
 });
 builder.Logging.AddFilter((provider, category, logLevel) =>
 {
-    return provider!.ToLower().Contains("woodgroveapi");
+    // Note: this predicate is keyed on the logger *category*, not the provider name.
+    // (The 3-arg AddFilter overload passes provider type name as the first argument,
+    // but none of our registered providers contain "woodgroveapi" in their type name,
+    // so filtering on `provider` here would silently suppress all log output.)
+    return category!.ToLower().Contains("woodgroveapi");
 });
 
 ConfigurationSection entraExternalIdCustomAuthTokenSettings = (ConfigurationSection)builder.Configuration.GetSection("EntraExternalIdCustomAuthToken");
