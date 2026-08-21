@@ -44,7 +44,11 @@ public class SsprAutomationRegressionTests
         string workflow = ReadDeployWorkflow();
 
         Assert.Contains("allowExternalIdToUseEmailOtp", workflow);
-        Assert.Contains("all_users", workflow);
+        // The Graph API requires targetType 'allUsers' (not 'group') to actually apply
+        // the policy tenant-wide; 'group' + id 'all_users' is NOT a valid group object ID
+        // and would silently fail to enable Email OTP for anyone.
+        Assert.Contains("targetType = 'allUsers'", workflow);
+        Assert.Contains("id = 'all_users'", workflow);
         // The PATCH must actually enable the method, not merely reference it.
         Assert.Contains("state = 'enabled'", workflow);
     }
@@ -54,19 +58,30 @@ public class SsprAutomationRegressionTests
     {
         string workflow = ReadDeployWorkflow();
 
-        // The Email OTP PATCH must be wrapped so a deployer identity missing
-        // Policy.ReadWrite.AuthenticationMethod logs a warning rather than aborting
-        // the whole deployment (this permission is optional/documented as manual
-        // fallback in infra/README.md).
+        // Locate the try block that immediately precedes the Email OTP PATCH call,
+        // and the catch block that immediately follows it, rather than relying on a
+        // fixed character offset (which would be fragile against unrelated edits and
+        // could coincidentally match one of the workflow's many other try/catch blocks).
         int patchIndex = workflow.IndexOf(
             "authenticationMethodConfigurations/email", StringComparison.Ordinal);
         Assert.True(patchIndex >= 0, "Could not locate the Email OTP PATCH call.");
 
-        string surroundingText = workflow.Substring(Math.Max(0, patchIndex - 400),
-            Math.Min(1200, workflow.Length - Math.Max(0, patchIndex - 400)));
+        int tryIndex = workflow.LastIndexOf("try {", patchIndex, StringComparison.Ordinal);
+        Assert.True(tryIndex >= 0, "Could not locate a 'try {' block preceding the Email OTP PATCH call.");
 
-        Assert.Contains("try", surroundingText);
-        Assert.Contains("catch", surroundingText);
-        Assert.Contains("Policy.ReadWrite.AuthenticationMethod", surroundingText);
+        int catchIndex = workflow.IndexOf("catch {", patchIndex, StringComparison.Ordinal);
+        Assert.True(catchIndex >= 0, "Could not locate a 'catch {' block following the Email OTP PATCH call.");
+
+        // The catch block's body (up to the next line starting a new statement at the
+        // same indentation, approximated here by the next blank line) must reference
+        // the specific permission this PATCH needs, so failures are diagnosable.
+        int catchBodyEnd = workflow.IndexOf("\r\n\r\n", catchIndex, StringComparison.Ordinal);
+        if (catchBodyEnd < 0)
+        {
+            catchBodyEnd = workflow.Length;
+        }
+        string catchBody = workflow.Substring(catchIndex, catchBodyEnd - catchIndex);
+
+        Assert.Contains("Policy.ReadWrite.AuthenticationMethod", catchBody);
     }
 }

@@ -810,7 +810,7 @@ jobs:
                 excludeTargets = @()
                 includeTargets = @(
                   [ordered]@{
-                    targetType = 'group'
+                    targetType = 'allUsers'
                     id = 'all_users'
                     isRegistrationRequired = $false
                   }
