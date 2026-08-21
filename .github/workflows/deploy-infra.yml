@@ -794,6 +794,34 @@ jobs:
           # Admin-consent the api app's delegated access to the Payment API (required for OBO)
           Ensure-OAuth2PermissionGrant -ClientServicePrincipalId $apiSp.id -ResourceServicePrincipalId $paymentApiSp.id -Scope 'Payment.Read Payment.ReadWrite'
 
+          # Enable the Email OTP authentication method tenant-wide — a prerequisite for
+          # self-service password reset (SSPR), documented in
+          # src/storefront/Areas/Help/Pages/SSPR.cshtml. Requires
+          # Policy.ReadWrite.AuthenticationMethod on the deployer identity; if that role
+          # isn't granted, log a warning and continue rather than failing the deployment
+          # (Email OTP can still be enabled manually per the SSPR help page).
+          try {
+            Invoke-GraphPatch `
+              -Uri 'https://graph.microsoft.com/v1.0/policies/authenticationMethodsPolicy/authenticationMethodConfigurations/email' `
+              -Body ([ordered]@{
+                '@odata.type' = '#microsoft.graph.emailAuthenticationMethodConfiguration'
+                state = 'enabled'
+                allowExternalIdToUseEmailOtp = 'default'
+                excludeTargets = @()
+                includeTargets = @(
+                  [ordered]@{
+                    targetType = 'allUsers'
+                    id = 'all_users'
+                    isRegistrationRequired = $false
+                  }
+                )
+              })
+            Write-Host "Email OTP authentication method enabled tenant-wide (SSPR prerequisite)."
+          }
+          catch {
+            Write-Warning "Could not enable Email OTP authentication method (requires Policy.ReadWrite.AuthenticationMethod on the deployer identity). Enable it manually — see src/storefront/Areas/Help/Pages/SSPR.cshtml. Error: $($_.Exception.Message)"
+          }
+
           "web_client_id=$($webApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "api_client_id=$($apiApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "graph_client_id=$($graphApp.appId)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
