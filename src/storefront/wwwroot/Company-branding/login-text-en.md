@@ -1,1 +1,1 @@
-Welcome to the **Woodgrove groceries** online store. Sign-in with your credentials, or create a new account. You can also sign-in with your *social accounts*, such as Facebook or Google. For help, please [contact us](https://woodgrovedemo.com/help).
+Welcome to the **ABERCROMBIE & FITCH** demo sign-in for Woodgrove Groceries. Sign in with your credentials, create an account, or continue with an available social identity. For help, [contact the Woodgrove demo team](https://woodgrovedemo.com/help).

@@ -140,6 +140,9 @@ namespace woodgroveapi.Models
         public string headerLogo { get; set; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string headerBackgroundColor { get; set; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public PageRenderStartResponse_LoginPageLayoutConfiguration loginPageLayoutConfiguration { get; set; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

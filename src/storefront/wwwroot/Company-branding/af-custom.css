@@ -20,7 +20,7 @@ body,
 .ext-boilerplate-text,
 .ext-footer-item,
 .ext-button {
-  font-family: Arial, sans-serif;
+  font-family: "Helvetica Neue", Arial, sans-serif;
 }
 
 body {
@@ -53,7 +53,7 @@ a:focus {
 
 .ext-title {
   color: var(--af-blue);
-  font-family: Garamond, "Times New Roman", serif;
+  font-family: Garamond, "Bodoni MT", "Times New Roman", serif;
   font-size: 2rem;
   font-weight: 600;
   letter-spacing: 0.3rem;
@@ -77,6 +77,7 @@ a:focus {
   border: 1px solid var(--af-black);
   border-radius: 0;
   color: var(--af-white);
+  font-family: "Helvetica Neue", Arial, sans-serif;
   letter-spacing: 0.18rem;
   text-transform: uppercase;
 }
@@ -90,6 +91,7 @@ a:focus {
   border: 1px solid var(--af-muted);
   border-radius: 0;
   color: var(--af-blue);
+  font-family: "Helvetica Neue", Arial, sans-serif;
   letter-spacing: 0.12rem;
   text-transform: uppercase;
 }

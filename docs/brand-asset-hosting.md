@@ -1,12 +1,12 @@
 # Brand-asset hosting
 
-Brand assets for demo-specific or customer-specific branding must stay **out of this public repository**. This repo now provisions a dedicated Azure Blob container and passes its base URL into the deployed apps through `.NET` configuration as `BrandAssets__BaseUrl`.
+Brand assets for demo-specific or customer-specific branding must stay **out of this public repository**. This repo provisions a dedicated Azure Blob container and passes its base URL into the deployed apps through `.NET` configuration as `BrandAssets__BaseUrl`.
 
 ## What gets deployed
 
 `infra/main.bicep` now deploys:
 
-- a private Storage Account dedicated to brand assets
+- a dedicated Storage Account for brand assets
 - a blob container named `brand-assets`
 - `Storage Blob Data Reader` RBAC for the storefront and auth-api managed identities
 - `Storage Blob Data Contributor` RBAC for the deployer identity, so CI/CD or an authorized operator can upload assets with Microsoft Entra auth
@@ -24,6 +24,7 @@ The storage account/container settings are:
 
 That means:
 
+- direct GETs for known blob URLs such as `{BrandAssets__BaseUrl}/af-logo.svg` work for browser-hosted sign-in pages and email clients
 - anonymous **blob GET** is allowed
 - anonymous **container listing** is still disabled
 - do **not** store anything sensitive in this container
@@ -74,6 +75,17 @@ Example files you might upload:
 - `favicon.png`
 - `background.jpeg`
 - `customcss.css`
+
+For the issue #83 Abercrombie & Fitch demo theme, the expected blob names are:
+
+- `af-logo.svg`
+- `af-logo-light.svg`
+- `af-background.jpg`
+- `af-favicon.png`
+- `af-headerlogo.png`
+- `af-bannerlogo.png`
+- `af-square-logo-light.png`
+- `af-square-logo-dark.png`
 
 ## Read model for Entra sign-in branding
 
