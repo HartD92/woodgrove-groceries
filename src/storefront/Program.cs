@@ -65,6 +65,7 @@ foreach (var scheme in AuthScheme.All)
                   options.TokenValidationParameters.RoleClaimType = "roles";
                   options.TokenValidationParameters.NameClaimType = "name";
                   options.Events.OnRedirectToIdentityProvider += OnRedirectToIdentityProviderFunc;
+                  options.Events.OnRedirectToIdentityProviderForSignOut += OnRedirectToIdentityProviderForSignOutFunc;
                   options.Events.OnMessageReceived += OnMessageReceivedFunc;
                   options.Events.OnAuthenticationFailed += OnAuthenticationFailedFunc;
                   options.Events.OnRemoteFailure += OnRemoteFailureFunc;
@@ -172,6 +173,13 @@ async Task OnRedirectToIdentityProviderFunc(RedirectContext context)
     await Task.CompletedTask.ConfigureAwait(false);
 }
 
+async Task OnRedirectToIdentityProviderForSignOutFunc(RedirectContext context)
+{
+    AuthRedirectCustomizer.Apply(context.ProtocolMessage, context.Properties.Items, defaultAuthCustomDomain);
+
+    await Task.CompletedTask.ConfigureAwait(false);
+}
+
 // Invoked when an OpenIdConnect message is first received.
 async Task OnMessageReceivedFunc(MessageReceivedContext context)
 {
@@ -245,4 +253,3 @@ async Task OnRemoteFailureFunc(RemoteFailureContext context)
     context.Response.Redirect($"/AuthError?error=APP_AUTH_0002&description={failureMessage}");
     await Task.CompletedTask.ConfigureAwait(false);
 }
-

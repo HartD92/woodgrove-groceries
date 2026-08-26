@@ -40,11 +40,11 @@ Still requires live-tenant configuration:
 
 ## Default custom auth host behavior (issue #91)
 
-The storefront should now treat the Entra custom domain as the **default browser-visible host** for local-account auth journeys, including both sign-in and sign-up, while still keeping the middleware's canonical authority on the tenant CIAM origin host.
+The storefront should now treat the Entra custom domain as the **default browser-visible host** for local-account auth journeys, including sign-in, sign-up, and sign-out, while still keeping the middleware's canonical authority on the tenant CIAM origin host.
 
 - `infra/main.bicep` continues to deploy `AzureAd__Authority` / `AzureAd__Instance` with `entraOriginHost` (`<tenant>.ciamlogin.com`) for Microsoft.Identity.Web compatibility.
 - The storefront now also gets `AzureAd__CustomDomain` (`customers.hartlabs.info` in the demo environment).
-- `src/storefront/Program.cs` applies that custom domain to the outgoing OpenID Connect authorize URL for every challenge by default, instead of limiting the host swap to the dedicated `CustomDomain` demo only.
+- `src/storefront/Program.cs` applies that custom domain to the outgoing OpenID Connect authorize and logout URLs for every challenge/sign-out redirect by default, instead of limiting the host swap to the dedicated `CustomDomain` demo only.
 - The redirect customizer preserves the existing issuer path/query and independently keeps per-flow parameters such as `prompt=create`, `login_hint`, `ui_locales`, and extra query-string parameters intact.
 
 Why this shape was chosen:
