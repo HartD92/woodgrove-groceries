@@ -138,8 +138,14 @@ var logWorkspaceName = 'log-woodgrove-${environmentName}'
 var appInsightsName  = 'appi-woodgrove-${environmentName}'
 var acsName          = 'acs-woodgrove-${environmentName}-${uniqueSuffix}'
 var emailSvcName     = 'email-woodgrove-${environmentName}-${uniqueSuffix}'
-var entraAuthorityUrl = 'https://${entraCustomDomainHost}/${tenantId}/v2.0/'
-var entraInstanceUrl = 'https://${entraCustomDomainHost}/'
+var brandAssetsStorageAccountName = 'stwgbr${take(replace(toLower(environmentName), '-', ''), 10)}${uniqueSuffix}'
+var brandAssetsContainerName = 'brand-assets'
+// Default storefront/API auth should target the tenant's canonical CIAM origin host.
+// Only the explicit CustomDomain demo should override the authorize host to the AFD-
+// backed branded domain via src/storefront/Program.cs + Demos__CustomDomain.
+var entraAuthorityUrl = 'https://${entraOriginHost}/'
+var entraInstanceUrl = 'https://${entraOriginHost}/'
+var brandAssetsBaseUrl = 'https://${brandAssetsStorageAccountName}.blob.${environment().suffixes.storage}/${brandAssetsContainerName}/'
 // EntraExternalIdUserToken metadata: used by ActAsDemoController etc. to validate
 // bearer tokens issued to real end users during sign-in. Those tokens ARE issued from
 // the tenant's CIAM origin host (ciamlogin.com), so this keeps using entraOriginHost.
@@ -315,6 +321,7 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'GraphApiMiddleware__Endpoint',                  value: 'https://${graphAppName}.azurewebsites.net/profile' }
       { name: 'Cloudflare__ZoneId',                            value: cloudflareZoneId }
       { name: 'Cloudflare__ApiSecret',                         value: kvRefCloudflare }
+      { name: 'BrandAssets__BaseUrl',                          value: brandAssetsBaseUrl }
       { name: 'Demos__CustomDomain',                           value: entraCustomDomainHost }
       { name: 'PasskeyManagement__RpIdOverride',                value: entraCustomDomainHost }
       { name: 'AppRoles__PrincipalId',                         value: appRolesPrincipalId }
@@ -399,6 +406,7 @@ module authApp 'modules/webApp.bicep' = {
       { name: 'EntraExternalIdCustomAuthToken__MetadataAddress', value: entraExternalIdCustomAuthMetadataAddress }
       { name: 'EntraExternalIdCustomAuthToken__Audience',        value: resolvedAuthClientId }
       { name: 'EntraExternalIdUserToken__MetadataAddress',       value: entraExternalIdMetadataAddress }
+      { name: 'BrandAssets__BaseUrl',                           value: brandAssetsBaseUrl }
       // TODO(#48): This uses the auth-api app registration client ID because
       // src/storefront requests WoodgroveGroceriesAuthApi tokens for ActAsDemo and
       // src/auth-api/appsettings.json models a GUID audience. Revisit if auth-api
@@ -428,6 +436,28 @@ module keyVault 'modules/keyVault.bicep' = {
       webApp.outputs.principalId
       apiApp.outputs.principalId
       graphApp.outputs.principalId
+      authApp.outputs.principalId
+    ]
+    deployerPrincipalId: deployer().objectId
+  }
+}
+
+// ============================================================
+// PRIVATE BRAND-ASSET STORAGE
+// Keep non-public demo/customer branding files out of the repo and serve them
+// from a private blob container. Managed identities can read with Entra RBAC.
+// ============================================================
+
+module brandAssetsStorage 'modules/brandAssetsStorage.bicep' = {
+  name: 'brandAssetsStorage'
+  scope: rg
+  params: {
+    name: brandAssetsStorageAccountName
+    location: location
+    containerName: brandAssetsContainerName
+    tags: allTags
+    readerPrincipalIds: [
+      webApp.outputs.principalId
       authApp.outputs.principalId
     ]
     deployerPrincipalId: deployer().objectId
@@ -473,6 +503,9 @@ output keyVaultName       string = keyVault.outputs.name
 output keyVaultUri        string = keyVault.outputs.uri
 output appInsightsName    string = monitoring.outputs.appInsightsName
 output acsResourceName    string = acs.outputs.name
+output brandAssetsStorageAccountName string = brandAssetsStorage.outputs.storageAccountName
+output brandAssetsContainerName string = brandAssetsStorage.outputs.containerName
+output brandAssetsBaseUrl string = brandAssetsStorage.outputs.containerBaseUrl
 output frontDoorEndpointHostName string = frontDoor.outputs.endpointHostName
 output frontDoorCustomDomainValidationToken string = frontDoor.outputs.customDomainValidationToken
 output frontDoorCustomDomainAssociationEnabled bool = frontDoor.outputs.customDomainAssociationEnabled
