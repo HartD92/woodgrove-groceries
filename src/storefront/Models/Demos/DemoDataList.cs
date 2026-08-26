@@ -853,7 +853,7 @@ public static class DemoDataList
                 <p>
                     The <a class='link-dark' href='https://learn.microsoft.com/en-us/entra/external-id/customers/concept-custom-url-domain'>custom URL domain</a> provides a more seamless user experience. From the user's perspective, they
                     remain in your domain during  the sign in process rather than redirecting to the Microsoft Entra external ID default domain
-                    <b>{tenant-name}</b>.ciamlogin.com. Note, this feature is currently limited to sign-in with local accounts.  Social accounts such as Google or Facebook are not yet supported. <br>
+                    <b>{tenant-name}</b>.ciamlogin.com. In this demo deployment, local-account sign-in and sign-up both stay on the branded domain. Social identity providers may still redirect to their own hosts. <br>
                 </p>
                 <ol>
                     <li>Select the <b>start the use case</b> button at the bottom of this page.</li>
@@ -1486,4 +1486,3 @@ public static class DemoDataList
         });
     }
 }
-
