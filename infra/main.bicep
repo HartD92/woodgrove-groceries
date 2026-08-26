@@ -140,9 +140,9 @@ var acsName          = 'acs-woodgrove-${environmentName}-${uniqueSuffix}'
 var emailSvcName     = 'email-woodgrove-${environmentName}-${uniqueSuffix}'
 var brandAssetsStorageAccountName = 'stwgbr${take(replace(toLower(environmentName), '-', ''), 10)}${uniqueSuffix}'
 var brandAssetsContainerName = 'brand-assets'
-// Default storefront/API auth should target the tenant's canonical CIAM origin host.
-// Only the explicit CustomDomain demo should override the authorize host to the AFD-
-// backed branded domain via src/storefront/Program.cs + Demos__CustomDomain.
+// Default storefront/API auth should keep Microsoft.Identity.Web on the tenant's
+// canonical CIAM origin host. The storefront separately rewrites the browser-visible
+// authorize/logout host to AzureAd__CustomDomain by default for local-account flows.
 var entraAuthorityUrl = 'https://${entraOriginHost}/'
 var entraInstanceUrl = 'https://${entraOriginHost}/'
 var brandAssetsBaseUrl = 'https://${brandAssetsStorageAccountName}.blob.${environment().suffixes.storage}/${brandAssetsContainerName}/'
@@ -306,6 +306,7 @@ module webApp 'modules/webApp.bicep' = {
       { name: 'AzureAd__ClientId',                            value: resolvedWebClientId }
       { name: 'AzureAd__Authority',                           value: entraAuthorityUrl }
       { name: 'AzureAd__Instance',                            value: entraInstanceUrl }
+      { name: 'AzureAd__CustomDomain',                        value: entraCustomDomainHost }
       { name: 'AzureAd__ClientCredentials__0__SourceType',     value: 'ClientSecret' }
       { name: 'AzureAd__ClientCredentials__0__ClientSecret',   value: kvRefWebSecret }
       { name: 'MicrosoftGraph__TenantId',                      value: tenantId }

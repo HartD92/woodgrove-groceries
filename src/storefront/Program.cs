@@ -24,6 +24,7 @@ DemoDataList.Initialize(builder.Configuration);
 // Add Microsoft Identity Web App authentication
 ConfigurationSection AzureAd = (ConfigurationSection)builder.Configuration.GetSection("AzureAd");
 ConfigurationSection WoodgroveGroceriesApi = (ConfigurationSection)builder.Configuration.GetSection("WoodgroveGroceriesApi");
+var defaultAuthCustomDomain = builder.Configuration.GetValue<string>("AzureAd:CustomDomain");
 
 // Avoid mapping of claims from short name to long (SAML like) claims.
 JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
@@ -64,6 +65,7 @@ foreach (var scheme in AuthScheme.All)
                   options.TokenValidationParameters.RoleClaimType = "roles";
                   options.TokenValidationParameters.NameClaimType = "name";
                   options.Events.OnRedirectToIdentityProvider += OnRedirectToIdentityProviderFunc;
+                  options.Events.OnRedirectToIdentityProviderForSignOut += OnRedirectToIdentityProviderForSignOutFunc;
                   options.Events.OnMessageReceived += OnMessageReceivedFunc;
                   options.Events.OnAuthenticationFailed += OnAuthenticationFailedFunc;
                   options.Events.OnRemoteFailure += OnRemoteFailureFunc;
@@ -165,83 +167,16 @@ async Task OnTokenValidatedFunc(TokenValidatedContext context)
 
 async Task OnRedirectToIdentityProviderFunc(RedirectContext context)
 {
-    // Read the 'force' custom parameter
-    var forceSignIn = context.Properties.Items.FirstOrDefault(x => x.Key == "force").Value;
+    AuthRedirectCustomizer.Apply(context.ProtocolMessage, context.Properties.Items, defaultAuthCustomDomain);
 
-    // Add your custom code here
-    if (forceSignIn != null)
-    {
-        context.ProtocolMessage.Prompt = "login";
-    }
-
-    // Read the 'StepUp' custom parameter
-    var stepUp = context.Properties.Items.FirstOrDefault(x => x.Key == "StepUp").Value;
-
-    // Add your custom code here
-    if (stepUp != null)
-    {
-        context.ProtocolMessage.Parameters.Add("claims", "%7B%22access_token%22%3A%7B%22acrs%22%3A%7B%22essential%22%3Atrue%2C%22value%22%3A%22c1%22%7D%7D%7D"); ;
-    }
-
-    // Read the 'StepUp' custom parameter
-    var domain = context.Properties.Items.FirstOrDefault(x => x.Key == "domain").Value;
-
-    // Add your custom code here
-    if (domain != null)
-    {
-        var builder = new UriBuilder(context.ProtocolMessage.IssuerAddress);
-        builder.Host = domain;
-        context.ProtocolMessage.IssuerAddress = builder.Uri.ToString();
-    }
-
-    // Read the 'prompt' custom parameter
-    var prompt = context.Properties.Items.FirstOrDefault(x => x.Key == "prompt").Value;
-    if (prompt != null)
-    {
-        context.ProtocolMessage.Prompt = prompt;
-    }
-
-    // Read the 'ui_locales' custom parameter
-    var ui_locales = context.Properties.Items.FirstOrDefault(x => x.Key == "ui_locales").Value;
-
-    if (ui_locales != null)
-    {
-        context.ProtocolMessage.Parameters.Add("mkt", ui_locales);
-        context.ProtocolMessage.UiLocales = ui_locales;
-    }
-
-    // Read the 'login_hint' custom parameter
-    var login_hint = context.Properties.Items.FirstOrDefault(x => x.Key == "login_hint").Value;
-
-    if (login_hint != null)
-    {
-        context.ProtocolMessage.LoginHint = login_hint;
-    }
-
-    // Read the 'domain_hint' custom parameter
-    var domain_hint = context.Properties.Items.FirstOrDefault(x => x.Key == "domain_hint").Value;
-
-    if (domain_hint != null)
-    {
-        context.ProtocolMessage.DomainHint = domain_hint;
-    }
-
-    // Read the 'query-string' custom query string
-    var queryString = context.Properties.Items.FirstOrDefault(x => x.Key == "query-string").Value;
-
-    if (queryString != null)
-    {
-        string[] parmas = queryString.Split("&");
-        foreach (var parma in parmas)
-        {
-            string[] kv = parma.Split("=");
-            if (kv.Length == 2)
-            {
-                context.ProtocolMessage.Parameters.Add(kv[0], kv[1]);
-            }
-        }
-    }
     // Don't remove this line
+    await Task.CompletedTask.ConfigureAwait(false);
+}
+
+async Task OnRedirectToIdentityProviderForSignOutFunc(RedirectContext context)
+{
+    AuthRedirectCustomizer.Apply(context.ProtocolMessage, context.Properties.Items, defaultAuthCustomDomain);
+
     await Task.CompletedTask.ConfigureAwait(false);
 }
 
@@ -274,7 +209,7 @@ async Task OnMessageReceivedFunc(MessageReceivedContext context)
     }
 }
 
-// Invoked if exceptions are thrown during OpenIdConnect request processing. 
+// Invoked if exceptions are thrown during OpenIdConnect request processing.
 // The exceptions will be re-thrown after this event unless suppressed.
 async Task OnAuthenticationFailedFunc(AuthenticationFailedContext context)
 {
@@ -318,5 +253,3 @@ async Task OnRemoteFailureFunc(RemoteFailureContext context)
     context.Response.Redirect($"/AuthError?error=APP_AUTH_0002&description={failureMessage}");
     await Task.CompletedTask.ConfigureAwait(false);
 }
-
-

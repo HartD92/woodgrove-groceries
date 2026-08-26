@@ -38,6 +38,23 @@ Still requires live-tenant configuration:
 - complete/validate the existing custom URL domain rollout (`login.woodgrovegroceries.com`) against the live Front Door + Entra tenant
 - enable any tenant-only toggles that are still admin-center only, such as the Company Branding self-service password reset display option
 
+## Default custom auth host behavior (issue #91)
+
+The storefront should now treat the Entra custom domain as the **default browser-visible host** for local-account auth journeys, including sign-in, sign-up, and sign-out, while still keeping the middleware's canonical authority on the tenant CIAM origin host.
+
+- `infra/main.bicep` continues to deploy `AzureAd__Authority` / `AzureAd__Instance` with `entraOriginHost` (`<tenant>.ciamlogin.com`) for Microsoft.Identity.Web compatibility.
+- The storefront now also gets `AzureAd__CustomDomain` (`customers.hartlabs.info` in the demo environment).
+- `src/storefront/Program.cs` applies that custom domain to the outgoing OpenID Connect authorize and logout URLs for every challenge/sign-out redirect by default, instead of limiting the host swap to the dedicated `CustomDomain` demo only.
+- The redirect customizer preserves the existing issuer path/query and independently keeps per-flow parameters such as `prompt=create`, `login_hint`, `ui_locales`, and extra query-string parameters intact.
+
+Why this shape was chosen:
+
+- Repo IaC for Front Door is a straight proxy (`infra/modules/frontDoor.bicep`): one catch-all route, no rule sets, no redirect actions, no rewrite actions, and no cache/query-string manipulation.
+- Live metadata on `https://customers.hartlabs.info/{tenantId}/v2.0/.well-known/openid-configuration` resolves successfully and returns custom-domain authorization/token endpoints.
+- The current deployed sign-up flow already emits `prompt=create` when challenged from the storefront; the remaining problem was that the default flow still sent users to the CIAM origin hostname unless the special CustomDomain demo path was used.
+
+This means the branded domain is enforced at the browser-facing authorize hop, which is the part users actually see in the address bar, without reintroducing the broader authority-coupling regression from issue #84.
+
 ## Brand Asset Hosting
 
 This repo is public, so **no actual Abercrombie & Fitch image assets are committed here**. Host the approved files in the blob-read-only Azure Blob container Dozer provisioned and set one of the following at deployment time:
