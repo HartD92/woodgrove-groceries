@@ -125,6 +125,7 @@ public class SendCodeController : ControllerBase
             var emailClient = new EmailClient(emailConnectionString);
 
             var subject = "Your Woodgrove account verification code";
+            var brandedLogoMarkup = GetBrandLogoMarkup();
             var htmlContent = @$"<html><body>
             <div style='background-color: #1F6402!important; padding: 15px'>
                 <table>
@@ -156,7 +157,7 @@ public class SendCodeController : ControllerBase
                     </tr>
                     <tr>
                         <td>
-                            <img src='https://woodgrovedemo.com/Company-branding/headerlogo.png' height='20'>
+                            {brandedLogoMarkup}
                         </td>
                         <td style='font-family: &quot;Segoe UI&quot;, Tahoma, Verdana, Arial, sans-serif;font-size: 14px;color: white; text-align: center;'>
                             <a href='https://woodgrovedemo.com/Privacy' style='color: white; text-decoration: none;'>Privacy Statement</a>
@@ -180,5 +181,22 @@ public class SendCodeController : ControllerBase
         {
             throw;
         }
+    }
+
+    private string GetBrandLogoMarkup()
+    {
+        var brandAssetsBaseUrl = _configuration["BrandAssets:BaseUrl"];
+
+        if (string.IsNullOrWhiteSpace(brandAssetsBaseUrl))
+        {
+            brandAssetsBaseUrl = _configuration["BRAND_ASSETS_BASE_URL"];
+        }
+
+        if (!string.IsNullOrWhiteSpace(brandAssetsBaseUrl))
+        {
+            return $"<img src='{brandAssetsBaseUrl.Trim().TrimEnd('/')}/af-headerlogo.png' height='20' alt='Brand logo'>";
+        }
+
+        return "<span style='font-family: Georgia, serif; letter-spacing: 0.2em; font-size: 12px; color: white;'>ABERCROMBIE &amp; FITCH</span>";
     }
 }

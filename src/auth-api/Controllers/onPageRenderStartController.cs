@@ -13,12 +13,14 @@ namespace woodgroveapi.Controllers;
 public class OnPageRenderStartController : ControllerBase
 {
     private readonly ILogger<OnPageRenderStartController> _logger;
-    private TelemetryClient _telemetry;
+    private readonly TelemetryClient _telemetry;
+    private readonly IConfiguration _configuration;
 
-    public OnPageRenderStartController(ILogger<OnPageRenderStartController> logger, TelemetryClient telemetry)
+    public OnPageRenderStartController(ILogger<OnPageRenderStartController> logger, TelemetryClient telemetry, IConfiguration configuration)
     {
         _logger = logger;
         _telemetry = telemetry;
+        _configuration = configuration;
     }
 
     [HttpPost(Name = "OnPageRenderStart")]
@@ -69,20 +71,26 @@ public class OnPageRenderStartController : ControllerBase
     private PageRenderStartResponse_TenantBranding RetrieveBranding(string appUrl, string welcome)
     {
         PageRenderStartResponse_TenantBranding branding = new PageRenderStartResponse_TenantBranding();
+        var externalAssetBaseUrl = GetBrandAssetsBaseUrl();
 
-        branding.customCSS = $"{appUrl}/Company-branding/customcss.css";
-        branding.backgroundImage = $"{appUrl}/Company-branding/background.jpeg";
-        branding.favicon = $"{appUrl}/Company-branding/favicon.png";
+        branding.backgroundColor = "#343434";
+        branding.customCSS = $"{appUrl}/Company-branding/af-custom.css";
 
         // Header
         branding.loginPageLayoutConfiguration = new PageRenderStartResponse_LoginPageLayoutConfiguration();
         branding.loginPageLayoutConfiguration.isHeaderShown = true;
         branding.loginPageLayoutConfiguration.isFooterShown = true;
-        branding.headerLogo = $"{appUrl}/Company-branding/headerlogo.png";
+        branding.headerBackgroundColor = "#223846";
+        branding.headerLogo = GetBrandAssetUrl(externalAssetBaseUrl, "af-logo-light.svg");
 
         // Sign in box
-        branding.signInPageText = $"Welcome to {welcome}. Sign-in with your credentials, or create a new account. You can also sign-in with your *social accounts*, such as Facebook or Google. For help, please [contact us](https://woodgrovedemo.com/help).";
-        branding.bannerLogo = $"{appUrl}/Company-branding/bannerlogo.png";
+        branding.usernameHintText = "Email address";
+        branding.signInPageText = $"Welcome to the **ABERCROMBIE & FITCH** demo sign-in for {welcome}. Sign in with your credentials, create an account, or continue with an available social identity. For help, please [contact the Woodgrove demo team](https://woodgrovedemo.com/help).";
+        branding.bannerLogo = GetBrandAssetUrl(externalAssetBaseUrl, "af-logo.svg");
+        branding.squareLogo = GetBrandAssetUrl(externalAssetBaseUrl, "af-square-logo-light.png");
+        branding.squareLogoDark = GetBrandAssetUrl(externalAssetBaseUrl, "af-square-logo-dark.png");
+        branding.backgroundImage = GetBrandAssetUrl(externalAssetBaseUrl, "af-background.jpg");
+        branding.favicon = GetBrandAssetUrl(externalAssetBaseUrl, "af-favicon.png");
 
         // Terms of use
         branding.customTermsOfUseText = "Woodgrove terms of use";
@@ -108,5 +116,32 @@ public class OnPageRenderStartController : ControllerBase
 
         return branding;
 
+    }
+
+    private string? GetBrandAssetsBaseUrl()
+    {
+        var configuredBaseUrl = _configuration["BrandAssets:BaseUrl"];
+
+        if (string.IsNullOrWhiteSpace(configuredBaseUrl))
+        {
+            configuredBaseUrl = _configuration["BRAND_ASSETS_BASE_URL"];
+        }
+
+        if (string.IsNullOrWhiteSpace(configuredBaseUrl))
+        {
+            return null;
+        }
+
+        return configuredBaseUrl.Trim().TrimEnd('/');
+    }
+
+    private static string? GetBrandAssetUrl(string? baseUrl, string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return null;
+        }
+
+        return $"{baseUrl}/{fileName}";
     }
 }

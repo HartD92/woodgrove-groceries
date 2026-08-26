@@ -64,6 +64,17 @@ Example files you might upload:
 - `background.jpeg`
 - `customcss.css`
 
+For the issue #83 Abercrombie & Fitch demo theme, the expected blob names are:
+
+- `af-logo.svg`
+- `af-logo-light.svg`
+- `af-background.jpg`
+- `af-favicon.png`
+- `af-headerlogo.png`
+- `af-bannerlogo.png`
+- `af-square-logo-light.png`
+- `af-square-logo-dark.png`
+
 ## Important limitation
 
 This container is intentionally **private**. `BrandAssets__BaseUrl` is therefore best treated as the canonical asset source for **server-side** reads or for a future signed/proxied delivery path.

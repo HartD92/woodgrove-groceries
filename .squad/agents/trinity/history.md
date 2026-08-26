@@ -14,3 +14,9 @@
 📌 Team update (2026-07-21T16:52:42-07:00): Deploy pipeline auth/RBAC lesson: the CI deploy service principal needs Key Vault Secrets Officer on RBAC-enabled Key Vaults, assigned with Bicep `deployer().objectId`, so workflow secret read/write steps can seed `web-client-secret`.
 
 📌 Team update (2026-07-22T18:49:00Z): CIAM correction: Microsoft.Identity.Web + Entra External ID must use Authority-only subdomain-root `https://{subdomain}.ciamlogin.com/` with no `TenantId`, `Domain`, or `Instance`; workforce-style `/{tenantId}/v2.0` caused `IDW10503` during `/signin-oidc` token redemption. — decided by David Hart/Trinity
+
+📌 Team update (2026-08-26T12:17:28.998-07:00): Researched issue #83 login branding. Recommendation: use External ID Company Branding + branded custom URL domain as the primary fix; avoid assuming Azure AD B2C-style hosted HTML/JS templates exist in External ID. Repo already has reusable branding assets, Front Door custom-domain plumbing, and an `onPageRenderStart` branding override for optional polish.
+
+📌 Team update (2026-08-26T12:34:19-07:00): Implemented the Abercrombie & Fitch demo branding pack for issue #83. Added sourced logo assets (af-logo.svg + light derivative), upload-safe PNG/JPG companions, infra/scripts/Apply-CompanyBranding.ps1 for Graph-based Company Branding updates, and updated onPageRenderStart to emit the new colors, logos, square logos, background, favicon, and CSS. Validation: branding asset dimensions verified; repo build could not run locally because only .NET SDK 9.0.317 is installed while the projects target net10.0.
+
+📌 Team update (2026-08-26T12:45:25-07:00): Public-repo branding correction for issue #83: removed all committed A&F image/logo files from the branch, switched login/email branding to BrandAssets__BaseUrl / BRAND_ASSETS_BASE_URL, kept only CSS/text fallback in-repo, and updated the Graph branding script/docs to expect approved assets in the private blob container.

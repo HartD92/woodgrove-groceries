@@ -465,11 +465,63 @@ After the cert syncs to App Service, **manually add its thumbprint to the graph-
 | `Application.ReadWrite.All` (application) | Creating/updating all 4 app registrations + SPs |
 | `AppRoleAssignment.ReadWrite.All` (application) | Granting admin consent for graph-middleware MS Graph app roles |
 | `DelegatedPermissionGrant.ReadWrite.All` (application) | Creating delegated OAuth2 grants for web → API scopes |
+| `OrganizationalBranding.ReadWrite.All` (application) | Applying External ID company branding assets, colors, text, and custom CSS via Microsoft Graph |
 | `Policy.ReadWrite.AuthenticationMethod` (application) | Enabling the Email OTP and SMS authentication methods for self-service password reset (SSPR) and SMS sign-in |
 | **Azure Contributor** on subscription | Creating all Azure resources |
 | **User Access Administrator** on subscription | Creating Key Vault RBAC role assignments |
 
 > David: If the deployer identity only has `Application.ReadWrite.All`, the app registrations will be created/updated correctly but admin consent for graph-middleware Graph permissions must be granted manually in the Entra portal.
+
+---
+
+## Post-Deploy: Company Branding
+
+This repo is public, so it keeps only the A&F theme code/text in-repo
+(`src/storefront/wwwroot/Company-branding/af-custom.css` and `login-text-*.md`).
+Host the actual image assets in the private brand-assets container and expose
+them via:
+
+- `BrandAssets__BaseUrl`
+- `BRAND_ASSETS_BASE_URL`
+
+Automation helper:
+
+- `infra/scripts/Apply-CompanyBranding.ps1`
+
+The script:
+
+- `PATCH`es the default `organizationalBranding` JSON properties
+- uploads `bannerLogo`, `headerLogo`, `backgroundImage`, `favicon`, `customCSS`, `squareLogo`, and `squareLogoDark`
+- reuses the same sign-in text used by `src/auth-api/Controllers/onPageRenderStartController.cs`
+- can pull the required image files from `BrandAssets__BaseUrl` instead of from committed repo assets
+
+Run it after signing in to the target External ID tenant:
+
+```powershell
+az login --tenant <extid-tenant-id> --allow-no-subscriptions
+.\infra\scripts\Apply-CompanyBranding.ps1 `
+  -OrganizationId <extid-tenant-id> `
+  -TenantId <extid-tenant-id> `
+  -BrandAssetsBaseUrl https://<private-brand-host>/brand-assets
+```
+
+This requires `OrganizationalBranding.ReadWrite.All`.
+
+Expected files at that base URL:
+
+- `af-logo.svg`
+- `af-logo-light.svg`
+- `af-background.jpg`
+- `af-favicon.png`
+- `af-headerlogo.png`
+- `af-bannerlogo.png`
+- `af-square-logo-light.png`
+- `af-square-logo-dark.png`
+
+Two branding-adjacent steps still remain manual/live-tenant specific:
+
+1. Complete and validate the custom URL domain rollout (`login.woodgrovegroceries.com`) in Entra External ID + Azure Front Door.
+2. Enable **Show self-service password reset** in Company Branding → Sign-in form if the demo flow should expose that link.
 
 ---
 

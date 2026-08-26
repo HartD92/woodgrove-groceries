@@ -205,21 +205,22 @@
     <div class="tab-pane" id="microsoftGraph" role="tabpanel" aria-labelledby="microsoftGraph-tab" tabindex="0">
 
         <h4 class="graph-header">Dependencies</h4>
-        This script is self-contained.
+        This script is self-contained for text/CSS, while image assets stay outside the public repo.
+        Configure <code>BrandAssets__BaseUrl</code> to point at the private brand-assets container, and use
+        <code>infra/scripts/Apply-CompanyBranding.ps1</code> to automate the same payload against a live tenant.
 
         <h4 class="graph-header graph-header-space">Update the default company branding</h4>
         <p>
-            <a href="https://learn.microsoft.com/en-us/graph/api/organizationalbrandinglocalization-update?view=graph-rest-1.0&tabs=http"
-                target="_blank" class="link-dark link-offset-2">Update</a> (not create) the properties of the default
-            localization, run the following Microsoft Graph.
+            To update the default branding JSON properties, call
+            <a href="https://learn.microsoft.com/en-us/graph/api/organizationalbranding-update?view=graph-rest-1.0&tabs=http"
+                target="_blank" class="link-dark link-offset-2">Update organizationalBranding</a>.
             Replace the <b>{Tenant-ID}</b> with your tenant ID.
-
         </p>
 
 
         <!-- HTTP method-->
         <div class="function-http">
-            <code><span class="method">PATHC</span> https://graph.microsoft.com/v1.0/organization/<span class="highlight">{Tenant-ID}</span>/branding/localizations/0</code>
+            <code><span class="method">PATCH</span> https://graph.microsoft.com/v1.0/organization/<span class="highlight">{Tenant-ID}</span>/branding</code>
         </div>
 
         <!-- PowerShell method-->
@@ -231,29 +232,21 @@
         <a type="button" class="link-opacity-75 copyToClipboard" href="#"><i class="bi bi-copy"></i></a>
         <pre class="replace" ignoreNull>
 {
-    "id": "0",
-    "backgroundColor": "#cddfcc",
-    "customAccountResetCredentialsUrl": null,
-    "customCannotAccessYourAccountText": null,
-    "customCannotAccessYourAccountUrl": null,
-    "customForgotMyPasswordText": null,
-    "customPrivacyAndCookiesText": "Privacy & Cookies",
-    "customPrivacyAndCookiesUrl": "https://woodgrovedemo.com/Privacy",
-    "customResetItNowText": null,
-    "customTermsOfUseText": "Terms of use",
-    "customTermsOfUseUrl": "https://woodgrovedemo.com/TOS",
-    "headerBackgroundColor": null,
-    "signInPageText": "Welcome to the **Woodgrove groceries** online store. Sign-in with your credentials, or create a new account. You can also sign-in with your *social accounts*, such as Facebook or Google. For help, please [contact us](https://woodgrovedemo.com/help).",
-    "squareLogoRelativeUrl": null,
-    "squareLogoDarkRelativeUrl": null,
-    "usernameHintText": null,
+    "backgroundColor": "#343434",
+    "customPrivacyAndCookiesText": "Privacy & Cookies statement",
+    "customPrivacyAndCookiesUrl": "https://woodgrovedemo.com/privacy",
+    "customTermsOfUseText": "Woodgrove terms of use",
+    "customTermsOfUseUrl": "https://woodgrovedemo.com/tos",
+    "headerBackgroundColor": "#223846",
+    "signInPageText": "Welcome to the **ABERCROMBIE & FITCH** demo sign-in for **Woodgrove groceries** online store. Sign in with your credentials, create an account, or continue with an available social identity. For help, please [contact the Woodgrove demo team](https://woodgrovedemo.com/help).",
+    "usernameHintText": "Email address",
     "loginPageTextVisibilitySettings": {
-        "hideCannotAccessYourAccount": null,
+        "hideCannotAccessYourAccount": false,
         "hideAccountResetCredentials": false,
         "hideTermsOfUse": false,
         "hidePrivacyAndCookies": false,
-        "hideForgotMyPassword": null,
-        "hideResetItNow": null
+        "hideForgotMyPassword": false,
+        "hideResetItNow": false
     },
     "loginPageLayoutConfiguration": {
         "layoutTemplateType": "default",
@@ -265,8 +258,14 @@
 
         <!-- PowerShell method-->
         <div class="function-powershell" style="margin-top: 15px;;">
-            <code><span class="method">Update-MgOrganizationBrandingLocalization</span> <span class="param">-OrganizationId</span> <b>{Tenant-ID}</b> <span class="param">-OrganizationalBrandingLocalizationId</span> 0 <span class="param">-BodyParameter</span> $params</code>
+            <code><span class="method">.\\infra\\scripts\\Apply-CompanyBranding.ps1</span> <span class="param">-OrganizationId</span> <b>{Tenant-ID}</b> <span class="param">-BrandAssetsBaseUrl</span> https://&lt;private-brand-host&gt;/brand-assets</code>
         </div>
+
+        <p style="margin-top: 15px;">
+            After the PATCH, upload the stream assets separately (banner logo, header logo, background image, favicon,
+            square logos, and custom CSS). The helper script does both the JSON PATCH and the required stream PUT calls,
+            downloading the protected image files from <code>BrandAssets__BaseUrl</code> when needed.
+        </p>
 
     </div>
 
@@ -274,4 +273,3 @@
         Loading...
     </div>
 </div>
-
