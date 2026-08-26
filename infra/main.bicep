@@ -138,8 +138,11 @@ var logWorkspaceName = 'log-woodgrove-${environmentName}'
 var appInsightsName  = 'appi-woodgrove-${environmentName}'
 var acsName          = 'acs-woodgrove-${environmentName}-${uniqueSuffix}'
 var emailSvcName     = 'email-woodgrove-${environmentName}-${uniqueSuffix}'
-var entraAuthorityUrl = 'https://${entraCustomDomainHost}/${tenantId}/v2.0/'
-var entraInstanceUrl = 'https://${entraCustomDomainHost}/'
+// Default storefront/API auth should target the tenant's canonical CIAM origin host.
+// Only the explicit CustomDomain demo should override the authorize host to the AFD-
+// backed branded domain via src/storefront/Program.cs + Demos__CustomDomain.
+var entraAuthorityUrl = 'https://${entraOriginHost}/'
+var entraInstanceUrl = 'https://${entraOriginHost}/'
 // EntraExternalIdUserToken metadata: used by ActAsDemoController etc. to validate
 // bearer tokens issued to real end users during sign-in. Those tokens ARE issued from
 // the tenant's CIAM origin host (ciamlogin.com), so this keeps using entraOriginHost.
