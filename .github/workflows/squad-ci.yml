@@ -7,6 +7,10 @@ on:
       - preview
       - main
       - insider
+  push:
+    branches:
+      - dev
+      - insider
 
 jobs:
   build-and-test:
