@@ -13,22 +13,26 @@
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/woodgrovedemo.styles.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/bs-stepper.min.css">
+    <link rel="stylesheet" href="~/css/af-theme.css" asp-append-version="true" />
 
     <!--- Font ---->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 
-<body>
+<body class="af-theme">
     <header class="header" id="header">
-        <div id="headerContainer" class="container" style="padding-top: 20px; padding-bottom: 20px;">
-            <nav class="navbar navbar-expand-lg">
+        <div id="headerContainer" class="container af-header-container">
+            <nav class="navbar navbar-expand-lg wg-navbar">
                 <div class="container-fluid">
-                    <a asp-page="/Index">
-                        <img src="/images/logo.png" height="22" alt="Woodgrove logo" style="padding-left: 10px;" />
-                    </a> <a class="navbar-brand" asp-area="" asp-page="/Index" style="padding-left: 15px;">Woodgrove
-                        Groceries</a>
+                    <a asp-area="" asp-page="/Index" class="brand-shell text-decoration-none">
+                        <img src="/images/logo.png" height="26" alt="Woodgrove logo" class="brand-mark" />
+                        <span class="brand-copy">
+                            <span class="brand-wordmark">Woodgrove Groceries</span>
+                            <span class="brand-tagline">Curated identity experiences</span>
+                        </span>
+                    </a>
                     <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
                         data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false"
                         aria-label="Toggle navigation">
@@ -52,7 +56,7 @@
 
     @RenderSection("FullScreen", required: false)
 
-    <div class="container">
+    <div class="container page-shell">
         <main class="pb-3">
             @RenderBody()
         </main>
@@ -111,14 +115,14 @@
     </div>
 
     <!-- Footer -->
-    <footer class="border-top footer text-muted" style="border-top-style: none!important; height: 100px;">
+    <footer class="border-top footer text-muted af-footer" style="border-top-style: none!important; height: 100px;">
         <svg viewBox="0 -20 700 110" width="100%" height="110" preserveAspectRatio="none" aria-hidden="true" focusable="false">
             <path transform="translate(0, -20)" d="M0,10 c80,-22 240,0 350,18 c90,17 260,7.5 350,-20 v50 h-700"
-                fill="rgb(50, 111, 2)" />
-            <path d="M0,10 c80,-18 230,-12 350,7 c80,13 260,17 350,-5 v100 h-700z" fill="rgb(222, 238, 222)" />
+                fill="#352f39" />
+            <path d="M0,10 c80,-18 230,-12 350,7 c80,13 260,17 350,-5 v100 h-700z" fill="#eccabb" />
         </svg>
-        <div class="container-fluid footer-text"
-            style="width: 100%; top: -60px; position: relative; background-color: rgb(222, 238, 222);">
+        <div class="container-fluid footer-text af-footer-text"
+            style="width: 100%; top: -60px; position: relative; background-color: #eccabb;">
             &copy; 2025 - Woodgrove Groceries &nbsp; - &nbsp;&nbsp;
             <i class="bi bi-info-circle" aria-hidden="true"></i> <a asp-area="" asp-page="/Help" style="padding-right: 10px;">Help</a>
             <i class="bi bi-lock" aria-hidden="true"></i> <a asp-area="" asp-page="/Privacy" style="padding-right: 10px;">Privacy</a>
