@@ -1,232 +1,133 @@
-@font-face
-{
-    /* Custom font definition: CURRENTLY NOT SUPPORTED */
+:root {
+  --af-black: #343434;
+  --af-blue: #223846;
+  --af-deep-gray: #352f39;
+  --af-muted: #908895;
+  --af-cream: #eccabb;
+  --af-rust: #814f4a;
+  --af-burgundy: #6e3d47;
+  --af-sand: #f6efe8;
+  --af-white: #fffdf9;
 }
 
-body
-{
-    /* Styles for the whole page */
+body,
+.ext-background-image,
+.ext-sign-in-box,
+.ext-promoted-fed-cred-box,
+.ext-input.ext-text-box,
+.ext-title,
+.ext-subtitle,
+.ext-boilerplate-text,
+.ext-footer-item,
+.ext-button {
+  font-family: Arial, sans-serif;
+}
+
+body {
+  background: radial-gradient(circle at top, rgba(236, 202, 187, 0.2), transparent 35%), var(--af-blue);
+  color: var(--af-white);
 }
 
 a,
-a:link
-{
-    /* Styles for links */
-    color: gray;
+a:link {
+  color: var(--af-cream);
 }
 
-a:hover
-{
-    /* Styles for links when the mouse is over the link */
+a:hover,
+a:focus {
+  color: var(--af-white);
 }
 
-a:focus
-{
-    /* Styles for links when the link has focus */
+.ext-header {
+  background: rgba(34, 56, 70, 0.92) !important;
+  border-bottom: 1px solid rgba(236, 202, 187, 0.2);
 }
 
-a:focus:hover
-{
-    /* Styles for links when the link has focus and the mouse is over the link */
+.ext-sign-in-box,
+.ext-promoted-fed-cred-box {
+  background: rgba(255, 253, 249, 0.96);
+  border: 1px solid rgba(52, 52, 52, 0.12);
+  border-radius: 0;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.24);
 }
 
-a:active
-{
-    /* Styles for links when the link is being clicked */
+.ext-title {
+  color: var(--af-blue);
+  font-family: Garamond, "Times New Roman", serif;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: 0.3rem;
+  padding: 0.5rem 0 1rem;
+  text-align: center;
+  text-transform: uppercase;
 }
 
-.ext-background-image
-{
-    /* Styles for the holder that contains the background image in the default lightbox template */
+.ext-subtitle,
+.ext-boilerplate-text,
+.ext-footer {
+  color: var(--af-deep-gray);
 }
 
-.ext-header
-{
-    /* Styles for the header at the top of the page */
-    background-color: #1F6402!important;
+.ext-button.ext-primary,
+.ext-button.ext-primary:hover,
+.ext-button.ext-primary:focus,
+.ext-button.ext-primary:focus:hover,
+.ext-button.ext-primary:active {
+  background: var(--af-black);
+  border: 1px solid var(--af-black);
+  border-radius: 0;
+  color: var(--af-white);
+  letter-spacing: 0.18rem;
+  text-transform: uppercase;
 }
 
-.ext-header-logo
-{
-    /* Styles for the header logo at the top of the page */
+.ext-button.ext-secondary,
+.ext-button.ext-secondary:hover,
+.ext-button.ext-secondary:focus,
+.ext-button.ext-secondary:focus:hover,
+.ext-button.ext-secondary:active {
+  background: transparent;
+  border: 1px solid var(--af-muted);
+  border-radius: 0;
+  color: var(--af-blue);
+  letter-spacing: 0.12rem;
+  text-transform: uppercase;
 }
 
-.ext-middle
-{
-    /* Styles for the container in the default lightbox template that alligns the sign in box vertically to the middle and horizontally to the center */
+.ext-input.ext-text-box,
+.ext-input.ext-text-box:hover,
+.ext-input.ext-text-box:focus,
+.ext-input.ext-text-box:focus:hover {
+  background-color: var(--af-white);
+  border: 1px solid rgba(52, 52, 52, 0.25);
+  border-radius: 0;
+  color: var(--af-black);
 }
 
-.ext-vertical-split-main-section
-{
-    /* Styles for the container in the vertical split (ADFS) template that contains both a sign in box and a background */
+.ext-input.ext-text-box.ext-has-error,
+.ext-error {
+  border-color: var(--af-burgundy);
+  color: var(--af-burgundy);
 }
 
-.ext-vertical-split-background-image-container
-{
-    /* Styles for the background in the vertical split (ADFS) template */
+.ext-boilerplate-text {
+  border-top: 1px solid rgba(144, 136, 149, 0.35);
+  margin-top: 2rem;
+  padding-top: 1.25rem;
 }
 
-.ext-sign-in-box
-{
-    /* Styles for the sign in box container */
-    margin-bottom: 15px;
-    border-style: solid;
-    border-radius: 15px;
-    border-width: 5px;
-    border-color: white;
+.ext-footer {
+  background: rgba(52, 52, 52, 0.92) !important;
 }
 
-.ext-title
-{
-    /* Styles for title text */
-    font-size: xx-large;
-    padding-bottom: 15px;
-    padding-top: 10px;
-    text-align: center;
-    color: #1F6402;
-    font-style: normal;
-    font-family: cursive;
+.ext-footer-item {
+  color: var(--af-cream) !important;
 }
 
-.ext-subtitle
-{
-    /* Styles for subtitle text */
+.ext-debug-item {
+  color: var(--af-muted);
 }
 
-.ext-button.ext-primary
-{
-    /* Styles for primary buttons */
-    background-color: #277C0F;
-    border-radius: 40px
-}
-
-.ext-button.ext-primary:hover
-{
-    /* Styles for primary buttons when the mouse is over the button */
-}
-
-.ext-button.ext-primary:focus
-{
-    /* Styles for primary buttons when the button has focus */
-}
-
-.ext-button.ext-primary:focus:hover
-{
-    /* Styles for primary buttons when the button has focus and the mouse is over the button */
-}
-
-.ext-button.ext-primary:active
-{
-    /* Styles for primary buttons when the button is being clicked */
-    /* keep the same as primary buttons styles*/
-}
-
-.ext-button.ext-secondary
-{
-    /* Styles for secondary buttons */
-    /* Blue */
-    background-color: #1978D5;
-    color: white;
-    border-radius: 40px
-}
-
-.ext-button.ext-secondary:hover
-{
-    /* Styles for secondary buttons when the mouse is over the button */
-    /* keep the same as secondary buttons styles*/
-}
-
-.ext-button.ext-secondary:focus
-{
-    /* Styles for secondary buttons when the button has focus */
-     /* keep the same as secondary buttons styles*/
-}
-
-.ext-button.ext-secondary:focus:hover
-{
-    /* Styles for secondary buttons when the button has focus and the mouse is over the button */
-     /* keep the same as secondary buttons styles*/
-}
-
-.ext-button.ext-secondary:active
-{
-    /* Styles for secondary buttons when the button is being clicked */
-}
-
-.ext-error
-{
-    /* Styles for error text */
-}
-
-.ext-input.ext-text-box
-{
-    /* Styles for text boxes */
-}
-
-.ext-input.ext-text-box.ext-has-error
-{
-    /* Styles for text boxes when there is a validation error associated with the text box */
-}
-
-.ext-input.ext-text-box:hover
-{
-    /* Styles for text boxes when the mouse is over the text box */
-}
-
-.ext-input.ext-text-box:focus
-{
-    /* Styles for text boxes when the text box has focus */
-}
-
-.ext-input.ext-text-box:focus:hover
-{
-    /* Styles for text boxes when the text box has focus and the mouse is over the text box */
-}
-
-.ext-boilerplate-text
-{
-    /* Styles for the custom message text at the bottom of the sign in box */
-    margin-top: 55px;
-    padding: 15px;
-}
-
-.ext-promoted-fed-cred-box
-{
-    /* Styles for sign-in options text box */
-    margin-bottom: 15px;
-    border-style: solid;
-    border-radius: 5px;
-    border-width: 4px;
-    border-color: white;
-    box-shadow: 0px 0px white;
-}
-
-.ext-footer
-{
-    /* Styles for the footer at the bottom of the page */
-    background-color: #1F6402!important;
-    color: black;
-    /* height: 55px;
-    padding-top: 15px; */
-}
-
-.ext-footer-item
-{
-    color: white!important;
-}
-
-.ext-footer-content
-{
-    /* Styles for the links in the footer at the bottom of the page */
-}
-
-.ext-debug-item
-{
-    /* Styles for the debug details ellipsis in the footer at the bottom of the page */
-    color: black;
-}
-
-.banner-logo
-{
-    max-height: 150px;
+.banner-logo {
+  max-height: 150px;
 }

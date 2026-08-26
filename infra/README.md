@@ -230,6 +230,7 @@ $MicrosoftGraphAppId = "00000003-0000-0000-c000-000000000000"
 $ApplicationReadWriteAll = "1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9"          # Application.ReadWrite.All
 $AppRoleAssignmentReadWriteAll = "06b708a9-e830-4db3-a914-8e69da51d44f"    # AppRoleAssignment.ReadWrite.All
 $DelegatedPermissionGrantReadWriteAll = "8e8e4742-1d95-4f68-9d56-6ee75648c72a" # VERIFY: DelegatedPermissionGrant.ReadWrite.All
+$PolicyReadWriteAuthenticationMethod = "29c18626-4985-4dcd-85c0-193eef327366"  # Policy.ReadWrite.AuthenticationMethod
 
 az ad app permission add `
   --id $EntrAppId `
@@ -246,8 +247,24 @@ az ad app permission add `
   --api $MicrosoftGraphAppId `
   --api-permissions "$($DelegatedPermissionGrantReadWriteAll)=Role"
 
+az ad app permission add `
+  --id $EntrAppId `
+  --api $MicrosoftGraphAppId `
+  --api-permissions "$($PolicyReadWriteAuthenticationMethod)=Role"
+
 az ad app permission admin-consent --id $EntrAppId
 ```
+
+If Identity B already exists, rerun the four `az ad app permission add` commands
+above for the existing `$EntrAppId`, then rerun:
+
+```powershell
+az ad app permission admin-consent --id $EntrAppId
+```
+
+The final admin-consent step must be performed by a tenant administrator with
+sufficient rights (for example, Global Administrator or Privileged Role
+Administrator).
 
 Set GitHub Actions variables:
 

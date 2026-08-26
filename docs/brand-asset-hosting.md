@@ -1,4 +1,4 @@
-# Public-read brand-asset hosting
+# Brand-asset hosting
 
 Brand assets for demo-specific or customer-specific branding must stay **out of this public repository**. This repo provisions a dedicated Azure Blob container and passes its base URL into the deployed apps through `.NET` configuration as `BrandAssets__BaseUrl`.
 
@@ -11,7 +11,12 @@ Brand assets for demo-specific or customer-specific branding must stay **out of 
 - `Storage Blob Data Reader` RBAC for the storefront and auth-api managed identities
 - `Storage Blob Data Contributor` RBAC for the deployer identity, so CI/CD or an authorized operator can upload assets with Microsoft Entra auth
 
-The current PR #85 branch configuration enables **anonymous blob-level read** while still blocking shared-key auth and container listing:
+The access model is intentionally split:
+
+- **writes/uploads:** locked down with Entra RBAC
+- **reads of individual asset URLs:** anonymous/public by design so the pre-auth sign-in page can load images in the end user's browser
+
+The storage account/container settings are:
 
 - `allowBlobPublicAccess = true`
 - `allowSharedKeyAccess = false`
@@ -20,8 +25,9 @@ The current PR #85 branch configuration enables **anonymous blob-level read** wh
 That means:
 
 - direct GETs for known blob URLs such as `{BrandAssets__BaseUrl}/af-logo.svg` work for browser-hosted sign-in pages and email clients
-- container enumeration is still disabled
-- uploads still use Azure AD auth via RBAC
+- anonymous **blob GET** is allowed
+- anonymous **container listing** is still disabled
+- do **not** store anything sensitive in this container
 
 ## Runtime configuration
 
@@ -43,7 +49,7 @@ Current wiring:
 
 No secret pipeline variable is required for the base URL.
 
-GitHub Actions runs `infra/main.bicep`, which derives the storage account name and container URL, then sets `BrandAssets__BaseUrl` on the deployed apps. The deploy identity also receives blob-contributor RBAC on the container so uploads can use `az login` / OIDC instead of account keys or SAS tokens.
+GitHub Actions runs `infra/main.bicep`, which derives the storage account name and container URL, then sets `BrandAssets__BaseUrl` on the deployed apps. The deploy identity also receives blob-contributor RBAC on the container so uploads can use `az login` / OIDC instead of account keys.
 
 ## Uploading assets
 
@@ -81,11 +87,17 @@ For the issue #83 Abercrombie & Fitch demo theme, the expected blob names are:
 - `af-square-logo-light.png`
 - `af-square-logo-dark.png`
 
-## Important limitation
+## Read model for Entra sign-in branding
 
-The container is intentionally **blob-read-only** for anonymous callers, not fully public. Callers can fetch a blob only if they already know its exact URL; listing remains disabled.
+Branding images used on the Entra External ID sign-in page load in the **unauthenticated user's browser** before sign-in completes. Because of that, the image URLs themselves must support plain anonymous GET.
 
-Do **not** commit new customer/demo brand files to this repo. Upload approved assets to the container instead, and treat the blob names above as part of the deployment contract.
+This repo therefore uses the standard low-risk pattern for login-page assets:
+
+- upload locked down with RBAC
+- anonymous read for individual blobs only
+- no anonymous container enumeration
+
+Do **not** commit new customer/demo brand files to this repo, and do **not** upload secrets, internal-only documents, or anything sensitive to this container.
 
 ## Related files
 

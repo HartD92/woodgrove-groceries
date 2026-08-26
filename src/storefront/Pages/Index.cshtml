@@ -1,44 +1,55 @@
-﻿@page
+@page
 @model IndexModel
 @{
     ViewData["Title"] = "Woodgrove Groceries";
 }
 
 @section Jumbotron {
-    <!-- Welcome message-->
-
     <div class="inner-header">
-        <div class="jumbotron" style="margin-top: 20px;">
-            <div class="container">
-                <div class="row align-items-center">
-                    <h1 class="h2"
-                        style="margin-bottom: 5px; margin-top: -10px; text-shadow: 1px 1px 10px rgb(3, 80, 2); w">Welcome to
-                        Woodgrove
-                        Groceries demo</h1>
+        <div class="container hero-shell">
+            <div class="hero-panel">
+                <p class="hero-eyebrow">Minimal. Premium. Customer-first.</p>
+                <h1 class="hero-title">Woodgrove's storefront now frames sign-in with a richer retail identity.</h1>
+                <p class="hero-copy">
+                    Inspired by a moody Abercrombie &amp; Fitch aesthetic, this demo wraps Microsoft Entra External ID in a
+                    darker editorial shell with refined typography, restrained color, and clear authentication calls to
+                    action before the hosted journey begins.
+                </p>
+                <div class="hero-actions">
+                    <a class="btn header-button hero-action-primary" href="/SignIn?handler=Default">
+                        <i class="bi bi-box-arrow-in-right"></i> Sign in
+                    </a>
+                    <a class="btn header-button header-button-secondary" href="/SignIn?handler=EmailAndPassword">
+                        <i class="bi bi-person-plus"></i> Sign up or sign in
+                    </a>
+                    <a class="hero-link"
+                        href="https://learn.microsoft.com/en-us/entra/external-id/customers/reference-training-videos#visit-our-video-library">
+                        Visit the video library
+                    </a>
+                    <a class="hero-link" href="/Help#usecase=CompanyBranding">Review the branding walkthrough</a>
                 </div>
-                <div class="row align-items-center" style="padding-top: 20px;">
-
-
-                    <div class="col lead" style="text-align: left;">
-                        <span style="letter-spacing: 0.1px;">
-                            <a href="https://aka.ms/ciam/docs" class="link-without-underline">Microsoft Entra External
-                                ID</a> offers solutions that let you quickly add
-                            intuitive, user-friendly sign-in and sign-up experiences for your external apps.
-                            <b>Woodgrove
-                                Groceries</b> live demo illustrates several authentication experiences for common retail
-                            scenarios.</span>
-                        <div style="text-align: left; padding-top: 15px;">
-                            <i class="bi bi-youtube fs-3" style="vertical-align: -.23em"></i> <a style="color: white;"
-                                class="link-light link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover"
-                                href="https://learn.microsoft.com/en-us/entra/external-id/customers/reference-training-videos#visit-our-video-library">Visit
-                                our video library</a>
-                        </div>
-                    </div>
+                <p class="hero-support-copy">
+                    <a href="https://aka.ms/ciam/docs" class="link-without-underline">Microsoft Entra External ID</a>
+                    still powers the hosted flow; the app-side experience around it now feels more deliberate and
+                    fashion-led.
+                </p>
+            </div>
+            <div class="hero-sidecar">
+                <div class="hero-sidecar-card">
+                    <span class="hero-sidecar-label">Brand palette</span>
+                    <ul class="hero-palette-list">
+                        <li><span class="hero-palette-swatch hero-palette-black"></span> Primary black #343434</li>
+                        <li><span class="hero-palette-swatch hero-palette-blue"></span> Rich blue #223846</li>
+                        <li><span class="hero-palette-swatch hero-palette-cream"></span> Light cream #eccabb</li>
+                    </ul>
+                    <p class="hero-sidecar-text">
+                        Shared typography and color tokens now carry through the shell, navigation, calls to action,
+                        cards, and help surfaces.
+                    </p>
                 </div>
             </div>
         </div>
     </div>
-    <!-- Welcome message end-->
 }
 
 <!-- #region hidden user info-->
