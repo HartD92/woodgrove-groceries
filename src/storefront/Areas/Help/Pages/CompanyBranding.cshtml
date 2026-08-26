@@ -206,7 +206,7 @@
 
         <h4 class="graph-header">Dependencies</h4>
         This script is self-contained for text/CSS, while image assets stay outside the public repo.
-        Configure <code>BrandAssets__BaseUrl</code> to point at the private brand-assets container, and use
+        Configure <code>BrandAssets__BaseUrl</code> to point at the blob-read-only brand-assets container, and use
         <code>infra/scripts/Apply-CompanyBranding.ps1</code> to automate the same payload against a live tenant.
 
         <h4 class="graph-header graph-header-space">Update the default company branding</h4>
@@ -264,7 +264,7 @@
         <p style="margin-top: 15px;">
             After the PATCH, upload the stream assets separately (banner logo, header logo, background image, favicon,
             square logos, and custom CSS). The helper script does both the JSON PATCH and the required stream PUT calls,
-            downloading the protected image files from <code>BrandAssets__BaseUrl</code> when needed.
+            downloading the image files from <code>BrandAssets__BaseUrl</code> when needed.
         </p>
 
     </div>

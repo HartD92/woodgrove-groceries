@@ -59,3 +59,27 @@ Because woodgrove-groceries is public, no actual Abercrombie & Fitch image/logo 
 ## Operational boundary
 
 The live tenant still needs approved A&F assets uploaded to the private blob container before the full branded experience can render or be pushed into Entra Company Branding via Graph.
+
+---
+
+# 2026-08-26T12:58:55-07:00 — Trinity — PR #87 review fixes for Company Branding
+
+## Verified dependency state
+
+I re-checked PR #85 branch squad/84-afd-signup-authority-fix and confirmed the brand-assets storage model is now compatible with direct anonymous blob URLs:
+
+- storage account llowBlobPublicAccess: true
+- container publicAccess: 'Blob'
+- browser/email GETs for known blob URLs are expected to work
+- container listing remains disabled
+
+## Fixes applied
+
+- Corrected infra/scripts/Apply-CompanyBranding.ps1 to send Authorization: Bearer <token> to Microsoft Graph instead of the broken placeholder header.
+- Corrected the Graph request header to use Accept-Language: en-US.
+- Left the unauthenticated Invoke-WebRequest blob download path in place and annotated why it is valid under the current blob-read-only access model.
+- Updated branding docs/help text to stop describing the container as private/proxy-only.
+
+## Remaining boundary
+
+These fixes assume PR #85's storage access model lands with this same blob-read-only configuration. If that storage PR changes again, the direct URL approach for sign-in pages and OTP emails should be re-validated.

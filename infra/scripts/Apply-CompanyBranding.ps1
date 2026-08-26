@@ -91,6 +91,9 @@ function Resolve-BrandingAssetPath {
             New-Item -ItemType Directory -Path $ScratchRoot -Force | Out-Null
         }
 
+        # PR #85 changed the brand-assets container to anonymous blob-level read
+        # (`allowBlobPublicAccess: true`, `publicAccess: 'Blob'`), so a plain GET
+        # against BrandAssetsBaseUrl should succeed for individual files.
         $downloadPath = Join-Path $ScratchRoot $FileName
         Invoke-WebRequest -Uri "$RemoteBaseUrl/$FileName" -OutFile $downloadPath | Out-Null
         return $downloadPath
@@ -119,7 +122,7 @@ $signInPageText = (Get-Content $loginTextPath -Raw).Trim()
 $token = Get-GraphAccessToken -Tenant $TenantId
 $headers = @{
     Authorization = "Bearer $token"
-    "Accept-Language" = "0"
+    "Accept-Language" = "en-US"
 }
 
 $brandingUri = "https://graph.microsoft.com/v1.0/organization/$OrganizationId/branding"

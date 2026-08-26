@@ -478,7 +478,7 @@ After the cert syncs to App Service, **manually add its thumbprint to the graph-
 
 This repo is public, so it keeps only the A&F theme code/text in-repo
 (`src/storefront/wwwroot/Company-branding/af-custom.css` and `login-text-*.md`).
-Host the actual image assets in the private brand-assets container and expose
+Host the actual image assets in the blob-read-only `brand-assets` container and expose
 them via:
 
 - `BrandAssets__BaseUrl`
@@ -495,6 +495,12 @@ The script:
 - reuses the same sign-in text used by `src/auth-api/Controllers/onPageRenderStartController.cs`
 - can pull the required image files from `BrandAssets__BaseUrl` instead of from committed repo assets
 
+Current access model (verified against PR #85 branch `squad/84-afd-signup-authority-fix`):
+
+- storage account `allowBlobPublicAccess: true`
+- container `publicAccess: 'Blob'`
+- anonymous GET works for known blob URLs, while container listing remains disabled
+
 Run it after signing in to the target External ID tenant:
 
 ```powershell
@@ -502,7 +508,7 @@ az login --tenant <extid-tenant-id> --allow-no-subscriptions
 .\infra\scripts\Apply-CompanyBranding.ps1 `
   -OrganizationId <extid-tenant-id> `
   -TenantId <extid-tenant-id> `
-  -BrandAssetsBaseUrl https://<private-brand-host>/brand-assets
+  -BrandAssetsBaseUrl https://<storage-account>.blob.<region-host>/brand-assets
 ```
 
 This requires `OrganizationalBranding.ReadWrite.All`.
