@@ -29,3 +29,5 @@
 📌 Team update (2026-08-26T12:37:31-07:00): Added private brand-asset hosting infra for issue #83 follow-up on top of the #84 fix. New Bicep module provisions a private blob container with MI/RBAC access, injects `BrandAssets__BaseUrl` into storefront + auth-api config, and documents upload/usage in `docs/brand-asset-hosting.md`. Validated with `az bicep lint` + `az bicep build` (existing BCP318 warnings only).
 
 📌 Team update (2026-08-26T12:44:22-07:00): Corrected the brand-asset storage access model for PR #85. Upload/write stays RBAC-only, but the `brand-assets` container now allows anonymous blob-level reads (`publicAccess=Blob`, no listing) because Entra login-page images are fetched by unauthenticated browsers before sign-in. Revalidated with `az bicep lint` + `az bicep build` (existing BCP318 warnings only).
+
+📌 Team update (2026-08-26T12:58:55-07:00): Cleaned up stale compiled ARM drift for PR #85 by deleting unreferenced `infra/main.json`. Verified deploy workflow uses `infra/main.bicep` directly, so removing the stale generated artifact avoids misleading manual deploys without affecting CI/CD.
