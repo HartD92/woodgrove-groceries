@@ -4,13 +4,13 @@ param name string
 @description('Azure region')
 param location string
 
-@description('Blob container name for non-public brand assets')
+@description('Blob container name for public-read brand assets')
 param containerName string = 'brand-assets'
 
 @description('Resource tags')
 param tags object = {}
 
-@description('Object IDs (principalId) of managed identities that need read access to brand assets')
+@description('Object IDs (principalId) of managed identities that need RBAC read access to brand assets')
 param readerPrincipalIds array = []
 
 @description('Object ID of the CI/CD deploying service principal to grant Blob Data Contributor for asset uploads. Empty string disables.')
@@ -29,7 +29,9 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   kind: 'StorageV2'
   properties: {
     accessTier: 'Hot'
-    allowBlobPublicAccess: false
+    // Required so this specific container can expose anonymous blob reads for
+    // login-page images. Listing is still disabled at the container level.
+    allowBlobPublicAccess: true
     allowCrossTenantReplication: false
     allowSharedKeyAccess: false
     defaultToOAuthAuthentication: true
@@ -48,7 +50,9 @@ resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@20
   parent: blobService
   name: containerName
   properties: {
-    publicAccess: 'None'
+    // Anonymous GET is allowed for individual blobs only; container enumeration
+    // remains disabled.
+    publicAccess: 'Blob'
   }
 }
 
