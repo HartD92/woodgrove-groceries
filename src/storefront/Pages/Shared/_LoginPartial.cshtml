@@ -1,26 +1,27 @@
-@using System.Security.Principal
+﻿@using System.Security.Principal
 @using Microsoft.AspNetCore.Authentication.OpenIdConnect
 @using Microsoft.Extensions.Configuration
 @inject IConfiguration Configuration
 
-@{
-    bool hasAccessToOrders = false;
+<ul class="navbar-nav">
+    @{
+        bool hasAccessToOrders = false;
 
-    if (User.Identity?.IsAuthenticated == true)
-    {
-        hasAccessToOrders = User.IsInRole("Orders.Manager");
-    }
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            hasAccessToOrders = User.IsInRole("Orders.Manager");
+        }
 
-    bool hasAccessToManageProducts = false;
+        bool hasAccessToManageProducts = false;
 
-    if (User.Identity?.IsAuthenticated == true)
-    {
-        // Check if the user has access to manage products
-        hasAccessToManageProducts = User.IsInRole("Products.Contributor");
-        // In other languages:
-        // - validate token with a library and check audience
-        // - do exact string match on "roles" claim and expected value in the token json payload
-    }
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            // Check if the user has access to manage products
+            hasAccessToManageProducts = User.IsInRole("Products.Contributor");
+            // In other languages:
+            // - validate token with a library and check audience
+            // - do exact string match on "roles" claim and expected value in the token json payload
+        }
 }
 
 @if (hasAccessToManageProducts)
@@ -39,17 +40,17 @@
     // Link to the orders available only to users with Orders.Manager role
     <li class="nav-item">
         <a class="nav-link header-button" role="button" asp-area="" asp-page="/Orders"><i class="bi bi-cart3"></i> Orders</a>
-    </li>
+    </li> 
 
     <li class="nav-item woodgrove-nav-space">
         <div style="width: 10px;"></div>
-    </li>
+    </li> 
 }
 
 
 
 @if (User.Identity?.IsAuthenticated == true)
-{
+{   
     @if (User.Claims.FirstOrDefault(c => c.Type == "AuthScheme")?.Value == OpenIdConnectDefaults.AuthenticationScheme)
     {
         <li class="nav-item">
@@ -70,12 +71,7 @@
 else
 {
     <li class="nav-item">
-        <a class="nav-link woodgrove-header-link woodgrove-header-link-subtle" role="button" href="/SignIn?handler=EmailAndPassword">Create account</a>
-    </li>
-    <li class="nav-item woodgrove-nav-space">
-        <div style="width: 10px;"></div>
-    </li>
-    <li class="nav-item">
         <a class="nav-link header-button" role="button" href="/SignIn?handler=Default">Sign in</a>
     </li>
 }
+</ul>
