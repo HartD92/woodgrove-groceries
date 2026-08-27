@@ -22,4 +22,8 @@
     <ProjectReference Include="..\woodgroveapi.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\migration\Woodgrove.Migration\Woodgrove.Migration.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -1,6 +1,11 @@
 using Microsoft.Extensions.Logging.AzureAppServices;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Woodgrove.Migration.Abstractions;
+using Woodgrove.Migration.Graph;
+using Woodgrove.Migration.Mock;
+using Woodgrove.Migration.Options;
+using Woodgrove.Migration.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -91,6 +96,11 @@ builder.Services.AddAuthentication()
 
 // Add in memory cache                                                  
 builder.Services.AddMemoryCache();
+
+builder.Services.Configure<MigrationOptions>(builder.Configuration.GetSection(MigrationOptions.SectionName));
+builder.Services.AddSingleton<ILegacyIdentityProvider, MockLegacyIdentityProvider>();
+builder.Services.AddSingleton<JweDecryptor>();
+builder.Services.AddScoped<GraphMigrationClient>();
 
 builder.Services.AddControllers();
 
